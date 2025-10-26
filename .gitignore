@@ -1,0 +1,238 @@
+# Amigusto - Documentación
+# .gitignore para repositorio de documentación técnica
+
+# ============================================
+# Sistema Operativo
+# ============================================
+
+# macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+Icon
+._*
+.DocumentRevisions-V100
+.fseventsd
+.Spotlight-V100
+.TemporaryItems
+.Trashes
+.VolumeIcon.icns
+.com.apple.timemachine.donotpresent
+.AppleDB
+.AppleDesktop
+Network Trash Folder
+Temporary Items
+.apdisk
+
+# Windows
+Thumbs.db
+Thumbs.db:encryptable
+ehthumbs.db
+ehthumbs_vista.db
+*.stackdump
+[Dd]esktop.ini
+$RECYCLE.BIN/
+*.cab
+*.msi
+*.msix
+*.msm
+*.msp
+*.lnk
+
+# Linux
+*~
+.fuse_hidden*
+.directory
+.Trash-*
+.nfs*
+
+# ============================================
+# Editores e IDEs
+# ============================================
+
+# Visual Studio Code
+.vscode/
+!.vscode/settings.json
+!.vscode/tasks.json
+!.vscode/launch.json
+!.vscode/extensions.json
+*.code-workspace
+.history/
+
+# JetBrains IDEs (IntelliJ, WebStorm, etc.)
+.idea/
+*.iml
+*.iws
+*.ipr
+out/
+.idea_modules/
+
+# Sublime Text
+*.sublime-project
+*.sublime-workspace
+
+# Vim
+[._]*.s[a-v][a-z]
+[._]*.sw[a-p]
+[._]s[a-rt-v][a-z]
+[._]ss[a-gi-z]
+[._]sw[a-p]
+Session.vim
+Sessionx.vim
+.netrwhist
+*~
+tags
+[._]*.un~
+
+# Emacs
+*~
+\#*\#
+/.emacs.desktop
+/.emacs.desktop.lock
+*.elc
+auto-save-list
+tramp
+.\#*
+
+# ============================================
+# Claude Code
+# ============================================
+
+# Claude Code cache (mantener configuración)
+.claude/
+!.claude/*.json
+!.claude/*.md
+
+# ============================================
+# Archivos Temporales
+# ============================================
+
+# Backups
+*.bak
+*.backup
+*.tmp
+*.temp
+*.swp
+*.swo
+*~.nib
+*.orig
+
+# Logs
+*.log
+logs/
+*.log.*
+
+# ============================================
+# Archivos de Configuración Local
+# ============================================
+
+# Variables de entorno (si se crean)
+.env
+.env.local
+.env.*.local
+*.env
+
+# Configuraciones locales
+config.local.*
+*.local
+
+# ============================================
+# Archivos Generados
+# ============================================
+
+# PDFs generados (si se exporta documentación)
+*.pdf
+# Excepto si hay PDFs oficiales
+!docs/*.pdf
+
+# Diagramas exportados (mantener los .md con Mermaid)
+diagrams/*.png
+diagrams/*.svg
+# Excepto los oficiales si los hay
+!docs/diagrams/*.png
+!docs/diagrams/*.svg
+
+# ============================================
+# Node.js (si se usa alguna herramienta de docs)
+# ============================================
+
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+package-lock.json
+yarn.lock
+.npm
+.yarn-integrity
+
+# ============================================
+# Python (si se usa alguna herramienta de docs)
+# ============================================
+
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+venv/
+ENV/
+env/
+.venv
+
+# ============================================
+# Archivos de Documentación Temporal
+# ============================================
+
+# Borradores
+DRAFT_*.md
+draft_*.md
+WIP_*.md
+TODO_LOCAL.md
+
+# Notas personales
+NOTES.md
+notes.md
+PERSONAL_*.md
+
+# ============================================
+# Compresión
+# ============================================
+
+*.zip
+*.tar
+*.tar.gz
+*.tgz
+*.rar
+*.7z
+
+# ============================================
+# Caché de Herramientas de Documentación
+# ============================================
+
+# MkDocs
+site/
+.cache/
+
+# Sphinx
+_build/
+.doctrees/
+
+# GitBook
+_book/
+
+# ============================================
+# COMENTARIOS Y GUÍAS
+# ============================================
+
+# Este .gitignore está diseñado para el repositorio de documentación de Amigusto
+#
+# Para los repositorios de código (backend, iOS, Android, web),
+# consultar ARQUITECTURA_PROYECTO.md sección 6 para los .gitignore específicos
+#
+# Patrones incluidos:
+# - Archivos de sistema operativo (macOS, Windows, Linux)
+# - Configuraciones de editores e IDEs
+# - Archivos temporales y backups
+# - Borradores y notas personales
+# - Archivos comprimidos
+# - Dependencias de herramientas (node_modules, venv, etc.)
