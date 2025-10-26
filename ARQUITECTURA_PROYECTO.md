@@ -1,871 +1,910 @@
 # Arquitectura de Proyecto - Amigusto
-## Estructura de Directorios y Organización del Monorepo
+## Estructura de Repositorios y Organización del Código
 
 ---
 
-## 1. ESTRUCTURA GENERAL DEL MONOREPO
+## 1. ESTRUCTURA GENERAL DE REPOSITORIOS
 
-Recomendación: Usar **Turborepo** o **Nx** para gestionar el monorepo.
+### 1.1 Enfoque Recomendado: 4 Repositorios Separados
 
 ```
-amigusto/
-├── apps/
-│   ├── mobile/              # App móvil React Native
-│   ├── web-portal/          # Portal web B2B (Next.js)
-│   ├── web-admin/           # Panel admin (Next.js)
-│   └── api/                 # Backend API (Node.js + Express)
+amigusto-backend/        (Java Spring Boot)
+amigusto-ios/           (Swift + SwiftUI)
+amigusto-android/       (Kotlin + Jetpack Compose)
+amigusto-web/           (Angular - Portal + Admin)
+```
+
+**Justificación:**
+- ✅ Cada equipo trabaja independientemente
+- ✅ CI/CD específico por plataforma
+- ✅ Control de versiones independiente
+- ✅ Releases independientes
+- ✅ Permisos granulares por repositorio
+
+### 1.2 Alternativa: Monorepo (No Recomendado para este Stack)
+
+Si prefieres un monorepo, sería más complejo porque mezcla tecnologías muy diferentes (Java, Swift, Kotlin, TypeScript).
+
+---
+
+## 2. ESTRUCTURA DEL BACKEND (JAVA SPRING BOOT)
+
+### 2.1 Estructura Completa
+
+```
+amigusto-backend/
+├── src/
+│   ├── main/
+│   │   ├── java/
+│   │   │   └── com/
+│   │   │       └── amigusto/
+│   │   │           ├── AmigustoApplication.java
+│   │   │           │
+│   │   │           ├── config/
+│   │   │           │   ├── SecurityConfig.java
+│   │   │           │   ├── JwtConfig.java
+│   │   │           │   ├── RedisConfig.java
+│   │   │           │   ├── S3Config.java
+│   │   │           │   ├── CorsConfig.java
+│   │   │           │   └── OpenApiConfig.java
+│   │   │           │
+│   │   │           ├── controller/
+│   │   │           │   ├── AuthController.java
+│   │   │           │   ├── EventController.java
+│   │   │           │   ├── GustoController.java
+│   │   │           │   ├── UserController.java
+│   │   │           │   ├── PromoterController.java
+│   │   │           │   └── AdminController.java
+│   │   │           │
+│   │   │           ├── service/
+│   │   │           │   ├── AuthService.java
+│   │   │           │   ├── EventService.java
+│   │   │           │   ├── GustoService.java
+│   │   │           │   ├── UserService.java
+│   │   │           │   ├── PromoterService.java
+│   │   │           │   ├── EmailService.java
+│   │   │           │   └── StorageService.java
+│   │   │           │
+│   │   │           ├── repository/
+│   │   │           │   ├── UserRepository.java
+│   │   │           │   ├── EventRepository.java
+│   │   │           │   ├── GustoRepository.java
+│   │   │           │   ├── PromoterRepository.java
+│   │   │           │   ├── SavedEventRepository.java
+│   │   │           │   └── CityRepository.java
+│   │   │           │
+│   │   │           ├── model/
+│   │   │           │   ├── entity/
+│   │   │           │   │   ├── User.java
+│   │   │           │   │   ├── Promoter.java
+│   │   │           │   │   ├── Event.java
+│   │   │           │   │   ├── Gusto.java
+│   │   │           │   │   ├── SavedEvent.java
+│   │   │           │   │   └── City.java
+│   │   │           │   │
+│   │   │           │   ├── dto/
+│   │   │           │   │   ├── request/
+│   │   │           │   │   │   ├── LoginRequest.java
+│   │   │           │   │   │   ├── RegisterRequest.java
+│   │   │           │   │   │   ├── CreateEventRequest.java
+│   │   │           │   │   │   ├── UpdateEventRequest.java
+│   │   │           │   │   │   └── EventFilterRequest.java
+│   │   │           │   │   └── response/
+│   │   │           │   │       ├── AuthResponse.java
+│   │   │           │   │       ├── EventResponse.java
+│   │   │           │   │       ├── EventDetailResponse.java
+│   │   │           │   │       ├── GustoResponse.java
+│   │   │           │   │       ├── PageResponse.java
+│   │   │           │   │       └── ApiResponse.java
+│   │   │           │   │
+│   │   │           │   └── enums/
+│   │   │           │       ├── UserRole.java
+│   │   │           │       ├── EventStatus.java
+│   │   │           │       ├── EventType.java
+│   │   │           │       └── PromoterStatus.java
+│   │   │           │
+│   │   │           ├── security/
+│   │   │           │   ├── JwtTokenProvider.java
+│   │   │           │   ├── JwtAuthenticationFilter.java
+│   │   │           │   ├── JwtAuthenticationEntryPoint.java
+│   │   │           │   ├── UserDetailsServiceImpl.java
+│   │   │           │   └── CustomUserDetails.java
+│   │   │           │
+│   │   │           ├── exception/
+│   │   │           │   ├── GlobalExceptionHandler.java
+│   │   │           │   ├── ResourceNotFoundException.java
+│   │   │           │   ├── UnauthorizedException.java
+│   │   │           │   ├── BadRequestException.java
+│   │   │           │   └── BusinessException.java
+│   │   │           │
+│   │   │           └── util/
+│   │   │               ├── DateUtil.java
+│   │   │               ├── GeoUtil.java
+│   │   │               ├── SlugUtil.java
+│   │   │               └── ValidationUtil.java
+│   │   │
+│   │   └── resources/
+│   │       ├── application.yml
+│   │       ├── application-dev.yml
+│   │       ├── application-prod.yml
+│   │       ├── db/
+│   │       │   └── migration/
+│   │       │       ├── V1__create_initial_schema.sql
+│   │       │       └── V2__seed_gustos_and_cities.sql
+│   │       └── templates/
+│   │           └── email/
+│   │               ├── event-approved.html
+│   │               ├── event-rejected.html
+│   │               └── welcome.html
+│   │
+│   └── test/
+│       └── java/
+│           └── com/
+│               └── amigusto/
+│                   ├── controller/
+│                   │   ├── AuthControllerTest.java
+│                   │   ├── EventControllerTest.java
+│                   │   └── AdminControllerTest.java
+│                   ├── service/
+│                   │   ├── EventServiceTest.java
+│                   │   ├── AuthServiceTest.java
+│                   │   └── UserServiceTest.java
+│                   └── repository/
+│                       └── EventRepositoryTest.java
 │
-├── packages/
-│   ├── ui/                  # Componentes UI compartidos
-│   ├── types/               # TypeScript types compartidos
-│   ├── config/              # Configs compartidas (ESLint, Prettier, TS)
-│   ├── utils/               # Utilidades compartidas
-│   └── database/            # Prisma schema y cliente
+├── docker-compose.yml
+├── Dockerfile
+├── pom.xml (o build.gradle.kts)
+├── .gitignore
+├── README.md
+└── .env.example
+```
+
+### 2.2 Convenciones de Código Java
+
+**Naming:**
+- Clases: PascalCase (`EventService`, `UserController`)
+- Métodos: camelCase (`getEventById`, `saveEvent`)
+- Constantes: UPPER_SNAKE_CASE (`MAX_FILE_SIZE`, `JWT_SECRET_KEY`)
+- Packages: lowercase (`com.amigusto.service`)
+
+**Anotaciones Spring:**
+```java
+@RestController
+@RequestMapping("/api/v1/events")
+@RequiredArgsConstructor
+@Slf4j
+@Validated
+public class EventController {
+    // ...
+}
+```
+
+---
+
+## 3. ESTRUCTURA DE iOS (SWIFT + SWIFTUI)
+
+### 3.1 Estructura Completa
+
+```
+AmigustoiOS/
+├── AmigustoiOS/
+│   ├── App/
+│   │   ├── AmigustoiOSApp.swift
+│   │   └── AppDelegate.swift
+│   │
+│   ├── Core/
+│   │   ├── Models/
+│   │   │   ├── Event.swift
+│   │   │   ├── Gusto.swift
+│   │   │   ├── User.swift
+│   │   │   ├── Promoter.swift
+│   │   │   └── City.swift
+│   │   │
+│   │   ├── Networking/
+│   │   │   ├── APIService.swift
+│   │   │   ├── Endpoints.swift
+│   │   │   ├── NetworkError.swift
+│   │   │   └── RequestBuilder.swift
+│   │   │
+│   │   └── Persistence/
+│   │       ├── CoreDataStack.swift
+│   │       ├── KeychainManager.swift
+│   │       └── UserDefaultsManager.swift
+│   │
+│   ├── Features/
+│   │   ├── Auth/
+│   │   │   ├── Views/
+│   │   │   │   ├── LoginView.swift
+│   │   │   │   └── RegisterView.swift
+│   │   │   └── ViewModels/
+│   │   │       └── AuthViewModel.swift
+│   │   │
+│   │   ├── Onboarding/
+│   │   │   ├── Views/
+│   │   │   │   ├── WelcomeView.swift
+│   │   │   │   ├── GustoSelectionView.swift
+│   │   │   │   └── LocationPermissionView.swift
+│   │   │   └── ViewModels/
+│   │   │       └── OnboardingViewModel.swift
+│   │   │
+│   │   ├── Discover/
+│   │   │   ├── Views/
+│   │   │   │   ├── DiscoverView.swift
+│   │   │   │   ├── EventCard.swift
+│   │   │   │   ├── EventDetailView.swift
+│   │   │   │   └── FilterSheet.swift
+│   │   │   └── ViewModels/
+│   │   │       ├── DiscoverViewModel.swift
+│   │   │       └── EventDetailViewModel.swift
+│   │   │
+│   │   └── MyPlans/
+│   │       ├── Views/
+│   │       │   ├── MyPlansView.swift
+│   │       │   └── SavedEventCard.swift
+│   │       └── ViewModels/
+│   │           └── MyPlansViewModel.swift
+│   │
+│   ├── Shared/
+│   │   ├── Components/
+│   │   │   ├── GustoChip.swift
+│   │   │   ├── LoadingView.swift
+│   │   │   ├── EmptyStateView.swift
+│   │   │   └── ErrorView.swift
+│   │   │
+│   │   ├── Extensions/
+│   │   │   ├── View+Extensions.swift
+│   │   │   ├── String+Extensions.swift
+│   │   │   ├── Date+Extensions.swift
+│   │   │   └── Color+Extensions.swift
+│   │   │
+│   │   └── Modifiers/
+│   │       ├── CardModifier.swift
+│   │       └── ShimmerModifier.swift
+│   │
+│   ├── Services/
+│   │   ├── EventService.swift
+│   │   ├── AuthService.swift
+│   │   ├── UserService.swift
+│   │   ├── LocationService.swift
+│   │   └── AnalyticsService.swift
+│   │
+│   ├── Utilities/
+│   │   ├── Constants.swift
+│   │   ├── Configuration.swift
+│   │   ├── Formatters.swift
+│   │   └── Logger.swift
+│   │
+│   ├── Resources/
+│   │   ├── Assets.xcassets/
+│   │   ├── Colors.xcassets/
+│   │   ├── Localizable.strings
+│   │   └── Info.plist
+│   │
+│   └── Navigation/
+│       ├── MainTabView.swift
+│       ├── NavigationCoordinator.swift
+│       └── DeepLinkHandler.swift
 │
-├── docs/                    # Documentación del proyecto
-├── scripts/                 # Scripts de automatización
-├── .github/                 # GitHub Actions workflows
-├── docker-compose.yml       # Para desarrollo local
-├── turbo.json               # Config de Turborepo
-├── package.json             # Root package.json
+├── AmigustoiOSTests/
+│   ├── ViewModelTests/
+│   │   ├── DiscoverViewModelTests.swift
+│   │   └── AuthViewModelTests.swift
+│   ├── ServiceTests/
+│   │   └── EventServiceTests.swift
+│   └── MockData/
+│       └── MockEventData.swift
+│
+├── AmigustoiOSUITests/
+│   └── DiscoverFlowTests.swift
+│
+├── AmigustoiOS.xcodeproj
+└── Podfile (o Package.swift si usas SPM)
+```
+
+### 3.2 Convenciones de Código Swift
+
+**Naming:**
+- Tipos: PascalCase (`EventViewModel`, `DiscoverView`)
+- Funciones/Variables: camelCase (`fetchEvents`, `selectedGustos`)
+- Protocolos: PascalCase con sufijo "able" o "ing" (`Codable`, `ObservableObject`)
+
+**SwiftUI Views:**
+```swift
+struct DiscoverView: View {
+    @StateObject private var viewModel = DiscoverViewModel()
+
+    var body: some View {
+        // UI here
+    }
+}
+```
+
+---
+
+## 4. ESTRUCTURA DE ANDROID (KOTLIN + JETPACK COMPOSE)
+
+### 4.1 Estructura Completa
+
+```
+AmigustoAndroid/
+├── app/
+│   ├── src/
+│   │   ├── main/
+│   │   │   ├── java/
+│   │   │   │   └── com/
+│   │   │   │       └── amigusto/
+│   │   │   │           ├── AmigustoApplication.kt
+│   │   │   │           │
+│   │   │   │           ├── di/
+│   │   │   │           │   ├── AppModule.kt
+│   │   │   │           │   ├── NetworkModule.kt
+│   │   │   │           │   ├── DatabaseModule.kt
+│   │   │   │           │   └── RepositoryModule.kt
+│   │   │   │           │
+│   │   │   │           ├── data/
+│   │   │   │           │   ├── remote/
+│   │   │   │           │   │   ├── api/
+│   │   │   │           │   │   │   ├── ApiService.kt
+│   │   │   │           │   │   │   ├── AuthApi.kt
+│   │   │   │           │   │   │   └── EventApi.kt
+│   │   │   │           │   │   ├── dto/
+│   │   │   │           │   │   │   ├── EventDto.kt
+│   │   │   │           │   │   │   ├── GustoDto.kt
+│   │   │   │           │   │   │   └── AuthDto.kt
+│   │   │   │           │   │   └── interceptor/
+│   │   │   │           │   │       ├── AuthInterceptor.kt
+│   │   │   │           │   │       └── ErrorInterceptor.kt
+│   │   │   │           │   │
+│   │   │   │           │   ├── local/
+│   │   │   │           │   │   ├── database/
+│   │   │   │           │   │   │   ├── AppDatabase.kt
+│   │   │   │           │   │   │   └── Converters.kt
+│   │   │   │           │   │   ├── dao/
+│   │   │   │           │   │   │   ├── EventDao.kt
+│   │   │   │           │   │   │   └── UserDao.kt
+│   │   │   │           │   │   ├── entity/
+│   │   │   │           │   │   │   ├── EventEntity.kt
+│   │   │   │           │   │   │   └── UserEntity.kt
+│   │   │   │           │   │   └── preferences/
+│   │   │   │           │   │       └── PreferencesManager.kt
+│   │   │   │           │   │
+│   │   │   │           │   ├── repository/
+│   │   │   │           │   │   ├── EventRepository.kt
+│   │   │   │           │   │   ├── EventRepositoryImpl.kt
+│   │   │   │           │   │   ├── AuthRepository.kt
+│   │   │   │           │   │   └── AuthRepositoryImpl.kt
+│   │   │   │           │   │
+│   │   │   │           │   └── mapper/
+│   │   │   │           │       ├── EventMapper.kt
+│   │   │   │           │       └── GustoMapper.kt
+│   │   │   │           │
+│   │   │   │           ├── domain/
+│   │   │   │           │   ├── model/
+│   │   │   │           │   │   ├── Event.kt
+│   │   │   │           │   │   ├── Gusto.kt
+│   │   │   │           │   │   ├── User.kt
+│   │   │   │           │   │   └── EventStatus.kt
+│   │   │   │           │   │
+│   │   │   │           │   ├── usecase/
+│   │   │   │           │   │   ├── GetEventsUseCase.kt
+│   │   │   │           │   │   ├── SaveEventUseCase.kt
+│   │   │   │           │   │   ├── GetSavedEventsUseCase.kt
+│   │   │   │           │   │   └── LoginUseCase.kt
+│   │   │   │           │   │
+│   │   │   │           │   └── repository/
+│   │   │   │           │       ├── IEventRepository.kt
+│   │   │   │           │       └── IAuthRepository.kt
+│   │   │   │           │
+│   │   │   │           └── presentation/
+│   │   │   │               ├── MainActivity.kt
+│   │   │   │               ├── navigation/
+│   │   │   │               │   ├── NavGraph.kt
+│   │   │   │               │   ├── Screen.kt
+│   │   │   │               │   └── NavigationExtensions.kt
+│   │   │   │               │
+│   │   │   │               ├── theme/
+│   │   │   │               │   ├── Color.kt
+│   │   │   │               │   ├── Type.kt
+│   │   │   │               │   ├── Theme.kt
+│   │   │   │               │   └── Shape.kt
+│   │   │   │               │
+│   │   │   │               ├── components/
+│   │   │   │               │   ├── EventCard.kt
+│   │   │   │               │   ├── GustoChip.kt
+│   │   │   │               │   ├── LoadingIndicator.kt
+│   │   │   │               │   └── ErrorMessage.kt
+│   │   │   │               │
+│   │   │   │               ├── onboarding/
+│   │   │   │               │   ├── OnboardingScreen.kt
+│   │   │   │               │   ├── OnboardingViewModel.kt
+│   │   │   │               │   └── GustoSelectionScreen.kt
+│   │   │   │               │
+│   │   │   │               ├── discover/
+│   │   │   │               │   ├── DiscoverScreen.kt
+│   │   │   │               │   ├── DiscoverViewModel.kt
+│   │   │   │               │   ├── EventDetailScreen.kt
+│   │   │   │               │   └── EventDetailViewModel.kt
+│   │   │   │               │
+│   │   │   │               ├── myplans/
+│   │   │   │               │   ├── MyPlansScreen.kt
+│   │   │   │               │   └── MyPlansViewModel.kt
+│   │   │   │               │
+│   │   │   │               └── util/
+│   │   │   │                   ├── Constants.kt
+│   │   │   │                   ├── Extensions.kt
+│   │   │   │                   └── DateFormatter.kt
+│   │   │   │
+│   │   │   ├── res/
+│   │   │   │   ├── values/
+│   │   │   │   │   ├── strings.xml
+│   │   │   │   │   ├── colors.xml
+│   │   │   │   │   └── themes.xml
+│   │   │   │   ├── drawable/
+│   │   │   │   └── mipmap/
+│   │   │   │
+│   │   │   └── AndroidManifest.xml
+│   │   │
+│   │   ├── test/
+│   │   │   └── java/
+│   │   │       └── com/amigusto/
+│   │   │           ├── viewmodel/
+│   │   │           │   └── DiscoverViewModelTest.kt
+│   │   │           ├── repository/
+│   │   │           │   └── EventRepositoryTest.kt
+│   │   │           └── usecase/
+│   │   │               └── GetEventsUseCaseTest.kt
+│   │   │
+│   │   └── androidTest/
+│   │       └── java/
+│   │           └── com/amigusto/
+│   │               └── ui/
+│   │                   └── DiscoverScreenTest.kt
+│   │
+│   ├── build.gradle.kts
+│   └── proguard-rules.pro
+│
+├── gradle/
+│   └── libs.versions.toml
+├── build.gradle.kts
+├── settings.gradle.kts
+└── gradle.properties
+```
+
+### 4.2 Convenciones de Código Kotlin
+
+**Naming:**
+- Clases/Interfaces: PascalCase (`EventRepository`, `DiscoverViewModel`)
+- Funciones/Variables: camelCase (`fetchEvents`, `savedEvents`)
+- Constantes: UPPER_SNAKE_CASE (`API_BASE_URL`, `MAX_RETRY_COUNT`)
+- Packages: lowercase (`com.amigusto.data.repository`)
+
+**Composables:**
+```kotlin
+@Composable
+fun DiscoverScreen(
+    viewModel: DiscoverViewModel = hiltViewModel()
+) {
+    val uiState by viewModel.uiState.collectAsState()
+
+    // UI here
+}
+```
+
+---
+
+## 5. ESTRUCTURA DE WEB (ANGULAR)
+
+### 5.1 Estructura Completa - Portal B2B + Admin
+
+```
+amigusto-web/
+├── projects/
+│   ├── portal/                    # App principal (Portal B2B)
+│   │   ├── src/
+│   │   │   ├── app/
+│   │   │   │   ├── core/
+│   │   │   │   │   ├── services/
+│   │   │   │   │   │   ├── api.service.ts
+│   │   │   │   │   │   ├── auth.service.ts
+│   │   │   │   │   │   ├── event.service.ts
+│   │   │   │   │   │   ├── gusto.service.ts
+│   │   │   │   │   │   └── storage.service.ts
+│   │   │   │   │   │
+│   │   │   │   │   ├── guards/
+│   │   │   │   │   │   ├── auth.guard.ts
+│   │   │   │   │   │   └── promoter.guard.ts
+│   │   │   │   │   │
+│   │   │   │   │   ├── interceptors/
+│   │   │   │   │   │   ├── auth.interceptor.ts
+│   │   │   │   │   │   ├── error.interceptor.ts
+│   │   │   │   │   │   └── loading.interceptor.ts
+│   │   │   │   │   │
+│   │   │   │   │   └── models/
+│   │   │   │   │       ├── event.model.ts
+│   │   │   │   │       ├── gusto.model.ts
+│   │   │   │   │       ├── user.model.ts
+│   │   │   │   │       └── api-response.model.ts
+│   │   │   │   │
+│   │   │   │   ├── features/
+│   │   │   │   │   ├── auth/
+│   │   │   │   │   │   ├── login/
+│   │   │   │   │   │   │   ├── login.component.ts
+│   │   │   │   │   │   │   ├── login.component.html
+│   │   │   │   │   │   │   └── login.component.scss
+│   │   │   │   │   │   └── register/
+│   │   │   │   │   │       ├── register.component.ts
+│   │   │   │   │   │       ├── register.component.html
+│   │   │   │   │   │       └── register.component.scss
+│   │   │   │   │   │
+│   │   │   │   │   ├── dashboard/
+│   │   │   │   │   │   ├── dashboard.component.ts
+│   │   │   │   │   │   ├── dashboard.component.html
+│   │   │   │   │   │   ├── dashboard.component.scss
+│   │   │   │   │   │   └── components/
+│   │   │   │   │   │       └── events-list/
+│   │   │   │   │   │           ├── events-list.component.ts
+│   │   │   │   │   │           ├── events-list.component.html
+│   │   │   │   │   │           └── events-list.component.scss
+│   │   │   │   │   │
+│   │   │   │   │   ├── events/
+│   │   │   │   │   │   ├── create-event/
+│   │   │   │   │   │   │   ├── create-event.component.ts
+│   │   │   │   │   │   │   ├── create-event.component.html
+│   │   │   │   │   │   │   └── create-event.component.scss
+│   │   │   │   │   │   ├── edit-event/
+│   │   │   │   │   │   │   ├── edit-event.component.ts
+│   │   │   │   │   │   │   ├── edit-event.component.html
+│   │   │   │   │   │   │   └── edit-event.component.scss
+│   │   │   │   │   │   └── components/
+│   │   │   │   │   │       └── event-form/
+│   │   │   │   │   │           ├── event-form.component.ts
+│   │   │   │   │   │           ├── event-form.component.html
+│   │   │   │   │   │           └── event-form.component.scss
+│   │   │   │   │   │
+│   │   │   │   │   └── profile/
+│   │   │   │   │       ├── profile.component.ts
+│   │   │   │   │       ├── profile.component.html
+│   │   │   │   │       └── profile.component.scss
+│   │   │   │   │
+│   │   │   │   ├── shared/
+│   │   │   │   │   ├── components/
+│   │   │   │   │   │   ├── event-status-badge/
+│   │   │   │   │   │   │   ├── event-status-badge.component.ts
+│   │   │   │   │   │   │   ├── event-status-badge.component.html
+│   │   │   │   │   │   │   └── event-status-badge.component.scss
+│   │   │   │   │   │   ├── gusto-selector/
+│   │   │   │   │   │   │   ├── gusto-selector.component.ts
+│   │   │   │   │   │   │   ├── gusto-selector.component.html
+│   │   │   │   │   │   │   └── gusto-selector.component.scss
+│   │   │   │   │   │   ├── image-uploader/
+│   │   │   │   │   │   │   ├── image-uploader.component.ts
+│   │   │   │   │   │   │   ├── image-uploader.component.html
+│   │   │   │   │   │   │   └── image-uploader.component.scss
+│   │   │   │   │   │   └── location-autocomplete/
+│   │   │   │   │   │       ├── location-autocomplete.component.ts
+│   │   │   │   │   │       ├── location-autocomplete.component.html
+│   │   │   │   │   │       └── location-autocomplete.component.scss
+│   │   │   │   │   │
+│   │   │   │   │   ├── directives/
+│   │   │   │   │   │   └── highlight.directive.ts
+│   │   │   │   │   │
+│   │   │   │   │   └── pipes/
+│   │   │   │   │       ├── date-format.pipe.ts
+│   │   │   │   │       ├── price-format.pipe.ts
+│   │   │   │   │       └── truncate.pipe.ts
+│   │   │   │   │
+│   │   │   │   ├── app.component.ts
+│   │   │   │   ├── app.component.html
+│   │   │   │   ├── app.component.scss
+│   │   │   │   ├── app.config.ts
+│   │   │   │   └── app.routes.ts
+│   │   │   │
+│   │   │   ├── assets/
+│   │   │   │   ├── images/
+│   │   │   │   ├── icons/
+│   │   │   │   └── i18n/
+│   │   │   │
+│   │   │   ├── environments/
+│   │   │   │   ├── environment.ts
+│   │   │   │   └── environment.prod.ts
+│   │   │   │
+│   │   │   ├── styles/
+│   │   │   │   ├── _variables.scss
+│   │   │   │   ├── _mixins.scss
+│   │   │   │   └── styles.scss
+│   │   │   │
+│   │   │   ├── index.html
+│   │   │   └── main.ts
+│   │   │
+│   │   └── project.json
+│   │
+│   └── admin-panel/              # App de administración
+│       ├── src/
+│       │   ├── app/
+│       │   │   ├── core/
+│       │   │   │   └── (similar a portal)
+│       │   │   │
+│       │   │   ├── features/
+│       │   │   │   ├── queue/
+│       │   │   │   │   ├── queue.component.ts
+│       │   │   │   │   └── queue.component.html
+│       │   │   │   ├── review/
+│       │   │   │   │   ├── review.component.ts
+│       │   │   │   │   └── review.component.html
+│       │   │   │   ├── promoters/
+│       │   │   │   │   ├── promoters.component.ts
+│       │   │   │   │   └── promoters.component.html
+│       │   │   │   └── dashboard/
+│       │   │   │       ├── dashboard.component.ts
+│       │   │   │       └── dashboard.component.html
+│       │   │   │
+│       │   │   └── shared/
+│       │   │       └── (componentes compartidos)
+│       │   │
+│       │   └── (igual estructura que portal)
+│       │
+│       └── project.json
+│
+├── angular.json
+├── package.json
+├── tsconfig.json
 └── README.md
 ```
 
----
+### 5.2 Convenciones de Código Angular
 
-## 2. ESTRUCTURA DETALLADA POR APP
+**Naming:**
+- Components: kebab-case files, PascalCase classes (`event-card.component.ts`, `EventCardComponent`)
+- Services: kebab-case files con sufijo `.service.ts` (`auth.service.ts`, `AuthService`)
+- Interfaces: PascalCase con prefijo "I" opcional (`IEvent` o `Event`)
+- Enums: PascalCase (`EventStatus`)
 
-### 2.1 App Móvil (`/apps/mobile`)
-
-```
-apps/mobile/
-├── src/
-│   ├── app/                    # Entry point
-│   │   └── index.tsx
-│   │
-│   ├── screens/                # Pantallas principales
-│   │   ├── auth/
-│   │   │   ├── LoginScreen.tsx
-│   │   │   └── RegisterScreen.tsx
-│   │   ├── onboarding/
-│   │   │   ├── WelcomeScreen.tsx
-│   │   │   └── SelectGustosScreen.tsx
-│   │   ├── discover/
-│   │   │   ├── DiscoverScreen.tsx
-│   │   │   ├── EventDetailScreen.tsx
-│   │   │   └── FilterScreen.tsx
-│   │   ├── plans/
-│   │   │   └── MyPlansScreen.tsx
-│   │   └── profile/
-│   │       ├── ProfileScreen.tsx
-│   │       └── EditGustosScreen.tsx
-│   │
-│   ├── components/             # Componentes reutilizables
-│   │   ├── cards/
-│   │   │   ├── EventCard.tsx
-│   │   │   └── EventCardSkeleton.tsx
-│   │   ├── buttons/
-│   │   │   ├── SaveButton.tsx
-│   │   │   └── ShareButton.tsx
-│   │   ├── inputs/
-│   │   │   └── SearchInput.tsx
-│   │   ├── lists/
-│   │   │   ├── EventList.tsx
-│   │   │   └── EmptyState.tsx
-│   │   ├── pickers/
-│   │   │   ├── GustoChip.tsx
-│   │   │   └── GustoSelector.tsx
-│   │   └── common/
-│   │       ├── Header.tsx
-│   │       ├── LoadingSpinner.tsx
-│   │       └── ErrorView.tsx
-│   │
-│   ├── navigation/             # Configuración de navegación
-│   │   ├── RootNavigator.tsx
-│   │   ├── MainTabNavigator.tsx
-│   │   ├── AuthStackNavigator.tsx
-│   │   └── linking.ts          # Deep linking config
-│   │
-│   ├── services/               # Servicios de API
-│   │   ├── api/
-│   │   │   ├── client.ts       # Axios instance
-│   │   │   ├── events.ts       # Events API calls
-│   │   │   ├── auth.ts         # Auth API calls
-│   │   │   ├── gustos.ts       # Gustos API calls
-│   │   │   └── users.ts        # Users API calls
-│   │   ├── storage/
-│   │   │   └── secureStore.ts  # Local storage wrapper
-│   │   └── location/
-│   │       └── geolocation.ts  # Location services
-│   │
-│   ├── hooks/                  # Custom React hooks
-│   │   ├── useEvents.ts
-│   │   ├── useSavedEvents.ts
-│   │   ├── useLocation.ts
-│   │   ├── useAuth.ts
-│   │   └── useGustos.ts
-│   │
-│   ├── stores/                 # State management (Zustand)
-│   │   ├── authStore.ts
-│   │   ├── userStore.ts
-│   │   ├── eventsStore.ts
-│   │   └── locationStore.ts
-│   │
-│   ├── types/                  # TypeScript types
-│   │   ├── models.ts           # API models
-│   │   ├── navigation.ts       # Navigation types
-│   │   └── api.ts              # API response types
-│   │
-│   ├── utils/                  # Utilidades
-│   │   ├── constants.ts        # Constantes (colores, etc)
-│   │   ├── formatters.ts       # Date, price formatters
-│   │   ├── validators.ts       # Form validators
-│   │   └── analytics.ts        # Analytics helpers
-│   │
-│   ├── theme/                  # Tema y estilos
-│   │   ├── colors.ts
-│   │   ├── typography.ts
-│   │   ├── spacing.ts
-│   │   └── theme.ts
-│   │
-│   └── assets/                 # Assets estáticos
-│       ├── images/
-│       ├── fonts/
-│       └── icons/
-│
-├── app.json                    # Expo config
-├── eas.json                    # EAS Build config
-├── babel.config.js
-├── tsconfig.json
-└── package.json
-```
-
-**Ejemplo de estructura de un screen:**
-
+**Component Structure:**
 ```typescript
-// src/screens/discover/DiscoverScreen.tsx
-import React from 'react';
-import { View, FlatList } from 'react-native';
-import { useEvents } from '@/hooks/useEvents';
-import { useUserStore } from '@/stores/userStore';
-import { EventCard } from '@/components/cards/EventCard';
-import { EmptyState } from '@/components/lists/EmptyState';
-
-export const DiscoverScreen = () => {
-  const { selectedGustos, city } = useUserStore();
-  const { data, isLoading, fetchNextPage } = useEvents({
-    gustos: selectedGustos,
-    city,
-  });
-
-  return (
-    <View>
-      <FlatList
-        data={data?.pages.flatMap(p => p.events)}
-        renderItem={({ item }) => <EventCard event={item} />}
-        onEndReached={() => fetchNextPage()}
-        ListEmptyComponent={<EmptyState />}
-      />
-    </View>
-  );
-};
-```
-
----
-
-### 2.2 Portal Web B2B (`/apps/web-portal`)
-
-```
-apps/web-portal/
-├── app/                        # Next.js App Router
-│   ├── (auth)/                 # Route group para auth
-│   │   ├── login/
-│   │   │   └── page.tsx
-│   │   ├── registro/
-│   │   │   └── page.tsx
-│   │   └── layout.tsx
-│   │
-│   ├── (dashboard)/            # Route group protegido
-│   │   ├── dashboard/
-│   │   │   ├── page.tsx        # Lista de eventos
-│   │   │   └── loading.tsx
-│   │   ├── eventos/
-│   │   │   ├── nuevo/
-│   │   │   │   └── page.tsx    # Crear evento
-│   │   │   └── [id]/
-│   │   │       ├── page.tsx    # Ver evento
-│   │   │       └── editar/
-│   │   │           └── page.tsx
-│   │   ├── perfil/
-│   │   │   └── page.tsx
-│   │   └── layout.tsx          # Layout con sidebar
-│   │
-│   ├── (marketing)/            # Landing pages públicas
-│   │   ├── page.tsx            # Home
-│   │   ├── por-que-amigusto/
-│   │   │   └── page.tsx
-│   │   ├── preguntas-frecuentes/
-│   │   │   └── page.tsx
-│   │   └── layout.tsx
-│   │
-│   ├── api/                    # API Routes (si se necesita)
-│   │   ├── auth/
-│   │   │   └── [...nextauth]/
-│   │   │       └── route.ts
-│   │   └── upload/
-│   │       └── route.ts        # Upload de imágenes
-│   │
-│   ├── layout.tsx              # Root layout
-│   ├── globals.css
-│   └── error.tsx
-│
-├── components/                 # Componentes React
-│   ├── forms/
-│   │   ├── EventForm/
-│   │   │   ├── EventForm.tsx
-│   │   │   ├── BasicInfoStep.tsx
-│   │   │   ├── LocationStep.tsx
-│   │   │   ├── DateTimeStep.tsx
-│   │   │   ├── PricingStep.tsx
-│   │   │   └── GustosStep.tsx
-│   │   ├── ImageUpload.tsx
-│   │   └── LocationAutocomplete.tsx
-│   │
-│   ├── layouts/
-│   │   ├── DashboardLayout.tsx
-│   │   ├── Sidebar.tsx
-│   │   └── Header.tsx
-│   │
-│   ├── tables/
-│   │   ├── EventsTable.tsx
-│   │   └── EventRow.tsx
-│   │
-│   ├── ui/                     # shadcn/ui components
-│   │   ├── button.tsx
-│   │   ├── input.tsx
-│   │   ├── select.tsx
-│   │   ├── dialog.tsx
-│   │   └── ...
-│   │
-│   └── common/
-│       ├── EventStatusBadge.tsx
-│       ├── LoadingSpinner.tsx
-│       └── ErrorBoundary.tsx
-│
-├── lib/                        # Librerías y utilidades
-│   ├── api.ts                  # Axios client
-│   ├── auth.ts                 # NextAuth config
-│   ├── validations.ts          # Zod schemas
-│   ├── utils.ts                # Helpers generales
-│   └── constants.ts
-│
-├── hooks/                      # Custom hooks
-│   ├── useEvents.ts
-│   ├── useUpload.ts
-│   └── useForm.ts
-│
-├── types/                      # TypeScript types
-│   └── index.d.ts
-│
-├── public/                     # Assets estáticos
-│   ├── images/
-│   └── icons/
-│
-├── next.config.js
-├── tailwind.config.ts
-├── tsconfig.json
-└── package.json
-```
-
-**Ejemplo de formulario de evento:**
-
-```typescript
-// app/(dashboard)/eventos/nuevo/page.tsx
-'use client';
-
-import { EventForm } from '@/components/forms/EventForm/EventForm';
-import { useRouter } from 'next/navigation';
-import { createEvent } from '@/lib/api';
-
-export default function NuevoEventoPage() {
-  const router = useRouter();
-
-  const handleSubmit = async (data: EventFormData) => {
-    try {
-      const event = await createEvent(data);
-      router.push(`/dashboard?created=${event.id}`);
-    } catch (error) {
-      console.error(error);
-    }
-  };
-
-  return (
-    <div className="container mx-auto py-8">
-      <h1 className="text-3xl font-bold mb-6">Crear Nuevo Evento</h1>
-      <EventForm onSubmit={handleSubmit} />
-    </div>
-  );
-}
-```
-
----
-
-### 2.3 Panel Admin (`/apps/web-admin`)
-
-```
-apps/web-admin/
-├── app/
-│   ├── (auth)/
-│   │   └── login/
-│   │       └── page.tsx
-│   │
-│   ├── (admin)/                # Layout protegido (solo admins)
-│   │   ├── dashboard/
-│   │   │   └── page.tsx        # Métricas y stats
-│   │   ├── queue/              # Cola de aprobación
-│   │   │   ├── page.tsx
-│   │   │   └── loading.tsx
-│   │   ├── review/
-│   │   │   └── [eventId]/
-│   │   │       └── page.tsx    # Página de revisión
-│   │   ├── approved/
-│   │   │   └── page.tsx
-│   │   ├── rejected/
-│   │   │   └── page.tsx
-│   │   ├── promoters/
-│   │   │   ├── page.tsx
-│   │   │   └── [id]/
-│   │   │       └── page.tsx
-│   │   └── layout.tsx
-│   │
-│   └── layout.tsx
-│
-├── components/
-│   ├── review/
-│   │   ├── EventReviewCard.tsx
-│   │   ├── ApprovalActions.tsx
-│   │   ├── RejectionModal.tsx
-│   │   └── EditGustosPanel.tsx
-│   ├── tables/
-│   │   ├── QueueTable.tsx      # Tabla de eventos pendientes
-│   │   └── PromotersTable.tsx
-│   ├── stats/
-│   │   ├── MetricsCard.tsx
-│   │   └── ApprovalChart.tsx
-│   └── ui/
-│       └── ...
-│
-├── lib/
-│   ├── adminApi.ts             # API calls específicas de admin
-│   └── permissions.ts          # Lógica de permisos
-│
-└── ...
-```
-
----
-
-### 2.4 Backend API (`/apps/api`)
-
-```
-apps/api/
-├── src/
-│   ├── modules/                # Módulos por dominio
-│   │   ├── auth/
-│   │   │   ├── auth.controller.ts
-│   │   │   ├── auth.service.ts
-│   │   │   ├── auth.routes.ts
-│   │   │   ├── auth.middleware.ts
-│   │   │   ├── auth.schemas.ts      # Zod schemas
-│   │   │   └── auth.types.ts
-│   │   │
-│   │   ├── events/
-│   │   │   ├── events.controller.ts
-│   │   │   ├── events.service.ts
-│   │   │   ├── events.repository.ts # Queries a BD
-│   │   │   ├── events.routes.ts
-│   │   │   ├── events.schemas.ts
-│   │   │   └── events.types.ts
-│   │   │
-│   │   ├── gustos/
-│   │   │   ├── gustos.controller.ts
-│   │   │   ├── gustos.service.ts
-│   │   │   ├── gustos.routes.ts
-│   │   │   └── gustos.schemas.ts
-│   │   │
-│   │   ├── users/
-│   │   │   ├── users.controller.ts
-│   │   │   ├── users.service.ts
-│   │   │   ├── users.repository.ts
-│   │   │   ├── users.routes.ts
-│   │   │   └── users.schemas.ts
-│   │   │
-│   │   ├── promoters/
-│   │   │   ├── promoters.controller.ts
-│   │   │   ├── promoters.service.ts
-│   │   │   ├── promoters.routes.ts
-│   │   │   └── promoters.schemas.ts
-│   │   │
-│   │   ├── admin/
-│   │   │   ├── admin.controller.ts
-│   │   │   ├── admin.service.ts
-│   │   │   ├── admin.routes.ts
-│   │   │   └── admin.middleware.ts
-│   │   │
-│   │   └── notifications/
-│   │       ├── notifications.service.ts
-│   │       ├── email.service.ts
-│   │       └── templates/
-│   │           ├── event-approved.hbs
-│   │           └── event-rejected.hbs
-│   │
-│   ├── common/                 # Código compartido
-│   │   ├── middleware/
-│   │   │   ├── auth.middleware.ts
-│   │   │   ├── error.middleware.ts
-│   │   │   ├── validation.middleware.ts
-│   │   │   ├── ratelimit.middleware.ts
-│   │   │   └── cors.middleware.ts
-│   │   │
-│   │   ├── utils/
-│   │   │   ├── logger.ts
-│   │   │   ├── response.ts
-│   │   │   ├── errors.ts
-│   │   │   ├── jwt.ts
-│   │   │   └── hash.ts
-│   │   │
-│   │   ├── types/
-│   │   │   ├── express.d.ts    # Extend Express types
-│   │   │   └── index.ts
-│   │   │
-│   │   └── constants/
-│   │       ├── errors.ts
-│   │       └── roles.ts
-│   │
-│   ├── config/                 # Configuraciones
-│   │   ├── database.ts         # Prisma client
-│   │   ├── redis.ts            # Redis client
-│   │   ├── s3.ts               # S3/Cloudinary config
-│   │   ├── email.ts            # Nodemailer config
-│   │   └── env.ts              # Validación de env vars (Zod)
-│   │
-│   ├── jobs/                   # Background jobs (BullMQ)
-│   │   ├── queues/
-│   │   │   ├── email.queue.ts
-│   │   │   └── event.queue.ts
-│   │   └── workers/
-│   │       ├── email.worker.ts
-│   │       └── event.worker.ts # Auto-marcar eventos pasados
-│   │
-│   ├── app.ts                  # Express app setup
-│   └── server.ts               # Entry point
-│
-├── prisma/
-│   ├── schema.prisma           # Ver PLAN_TECNICO_AMIGUSTO.md
-│   ├── seed.ts                 # Seed inicial
-│   └── migrations/
-│
-├── tests/                      # Tests
-│   ├── unit/
-│   ├── integration/
-│   └── e2e/
-│
-├── .env.example
-├── Dockerfile
-├── docker-compose.yml
-├── tsconfig.json
-└── package.json
-```
-
-**Ejemplo de módulo completo (Events):**
-
-```typescript
-// src/modules/events/events.controller.ts
-import { Request, Response, NextFunction } from 'express';
-import { EventsService } from './events.service';
-import { createEventSchema, updateEventSchema } from './events.schemas';
-
-export class EventsController {
-  constructor(private eventsService: EventsService) {}
-
-  async getEvents(req: Request, res: Response, next: NextFunction) {
-    try {
-      const filters = req.query; // Validar con Zod
-      const events = await this.eventsService.findEvents(filters);
-      res.json({ data: events });
-    } catch (error) {
-      next(error);
-    }
-  }
-
-  async createEvent(req: Request, res: Response, next: NextFunction) {
-    try {
-      const data = createEventSchema.parse(req.body);
-      const event = await this.eventsService.createEvent(data, req.user!.id);
-      res.status(201).json({ data: event });
-    } catch (error) {
-      next(error);
-    }
-  }
-
-  // ... más métodos
-}
-```
-
----
-
-## 3. PACKAGES COMPARTIDOS
-
-### 3.1 `/packages/types`
-
-```
-packages/types/
-├── src/
-│   ├── models/
-│   │   ├── User.ts
-│   │   ├── Event.ts
-│   │   ├── Gusto.ts
-│   │   └── Promoter.ts
-│   ├── api/
-│   │   ├── requests.ts
-│   │   └── responses.ts
-│   └── index.ts
-├── tsconfig.json
-└── package.json
-```
-
-**Ejemplo:**
-
-```typescript
-// packages/types/src/models/Event.ts
-export interface Event {
-  id: string;
-  title: string;
-  description: string;
-  imageUrl: string;
-  startDate: string;
-  endDate?: string;
-  venueName: string;
-  venueAddress: string;
-  city: string;
-  lat: number;
-  lng: number;
-  isFree: boolean;
-  price?: number;
-  gustos: Gusto[];
-  status: EventStatus;
-  // ... más campos
-}
-
-export type EventStatus =
-  | 'DRAFT'
-  | 'PENDING_REVIEW'
-  | 'APPROVED'
-  | 'REJECTED'
-  | 'CANCELLED'
-  | 'ENDED';
-```
-
-### 3.2 `/packages/ui`
-
-```
-packages/ui/
-├── src/
-│   ├── components/
-│   │   ├── Button.tsx          # Componente genérico
-│   │   ├── Input.tsx
-│   │   └── GustoChip.tsx       # Específico de Amigusto
-│   ├── styles/
-│   │   └── theme.ts
-│   └── index.ts
-└── package.json
-```
-
-### 3.3 `/packages/database`
-
-```
-packages/database/
-├── prisma/
-│   ├── schema.prisma
-│   └── migrations/
-├── src/
-│   ├── client.ts               # Export Prisma client
-│   └── seed.ts
-└── package.json
-```
-
-**Uso en apps:**
-
-```typescript
-// En apps/api/src/config/database.ts
-import { prisma } from '@amigusto/database';
-
-export { prisma };
-```
-
----
-
-## 4. CONVENCIONES DE CÓDIGO
-
-### 4.1 Naming Conventions
-
-**TypeScript/JavaScript:**
-- **Archivos:** kebab-case (`event-card.tsx`)
-- **Componentes:** PascalCase (`EventCard`)
-- **Funciones:** camelCase (`getEventById`)
-- **Constantes:** UPPER_SNAKE_CASE (`API_BASE_URL`)
-- **Interfaces:** PascalCase con "I" opcional (`IEvent` o `Event`)
-- **Types:** PascalCase (`EventStatus`)
-
-**Base de Datos (Prisma):**
-- **Modelos:** PascalCase singular (`Event`, `User`)
-- **Campos:** camelCase (`startDate`, `isFree`)
-- **Enums:** PascalCase (`EventStatus`)
-
-**API Endpoints:**
-- RESTful naming: `/events`, `/events/:id`
-- Plural para colecciones
-- Kebab-case para multi-palabra: `/saved-events`
-
-### 4.2 Estructura de Imports
-
-```typescript
-// 1. React y librerías externas
-import React, { useState } from 'react';
-import { View, Text } from 'react-native';
-import axios from 'axios';
-
-// 2. Types y constantes
-import type { Event } from '@amigusto/types';
-import { API_BASE_URL } from '@/utils/constants';
-
-// 3. Servicios y hooks
-import { useEvents } from '@/hooks/useEvents';
-import { eventService } from '@/services/api/events';
-
-// 4. Componentes
-import { EventCard } from '@/components/cards/EventCard';
-import { Button } from '@amigusto/ui';
-
-// 5. Estilos
-import styles from './styles.module.css';
-```
-
-### 4.3 Comentarios y Documentación
-
-**JSDoc para funciones públicas:**
-
-```typescript
-/**
- * Obtiene eventos filtrados por gustos y ciudad
- * @param filters - Filtros de búsqueda
- * @param filters.gustos - IDs de gustos seleccionados
- * @param filters.city - Ciudad del usuario
- * @returns Promise con array de eventos
- */
-export async function getEvents(filters: EventFilters): Promise<Event[]> {
+@Component({
+  selector: 'app-event-card',
+  standalone: true,
+  imports: [CommonModule, MatCardModule],
+  templateUrl: './event-card.component.html',
+  styleUrls: ['./event-card.component.scss']
+})
+export class EventCardComponent implements OnInit {
   // ...
 }
 ```
 
-**TODO comments:**
+---
 
-```typescript
-// TODO: Implementar cache en Redis
-// FIXME: Este query es lento, optimizar con índice
-// NOTE: Este endpoint será deprecado en v2
+## 6. GITIGNORE RECOMENDADO POR PROYECTO
+
+### 6.1 Backend (Java Spring Boot)
+
+```gitignore
+# Maven
+target/
+pom.xml.tag
+pom.xml.releaseBackup
+pom.xml.versionsBackup
+
+# Gradle
+.gradle/
+build/
+
+# IntelliJ IDEA
+.idea/
+*.iml
+*.iws
+
+# Eclipse
+.classpath
+.project
+.settings/
+
+# Application properties
+application-dev.yml
+application-local.yml
+*.env
+
+# Logs
+logs/
+*.log
+
+# OS
+.DS_Store
+Thumbs.db
+```
+
+### 6.2 iOS (Swift)
+
+```gitignore
+# Xcode
+xcuserdata/
+*.xcodeproj/*
+!*.xcodeproj/project.pbxproj
+!*.xcworkspace/contents.xcworkspacedata
+
+# SPM
+.swiftpm/
+.build/
+
+# CocoaPods
+Pods/
+*.podspec
+
+# Build
+DerivedData/
+build/
+
+# Configuration
+Configuration.plist
+
+# OS
+.DS_Store
+```
+
+### 6.3 Android (Kotlin)
+
+```gitignore
+# Gradle
+.gradle/
+build/
+local.properties
+
+# Android Studio
+.idea/
+*.iml
+.externalNativeBuild
+.cxx
+
+# Keystore
+*.jks
+*.keystore
+
+# Build
+app/release/
+
+# OS
+.DS_Store
+```
+
+### 6.4 Web (Angular)
+
+```gitignore
+# Dependencies
+node_modules/
+npm-debug.log
+yarn-error.log
+
+# Build
+dist/
+.angular/
+
+# Environment
+.env
+.env.local
+
+# IDE
+.vscode/
+.idea/
+
+# OS
+.DS_Store
 ```
 
 ---
 
-## 5. CONFIGURACIÓN DE DESARROLLO
+## 7. CI/CD PIPELINE SUGERIDO
 
-### 5.1 Docker Compose para Desarrollo Local
+### 7.1 Backend (GitHub Actions)
 
 ```yaml
-# docker-compose.yml (en root)
-version: '3.8'
+# .github/workflows/backend-ci.yml
+name: Backend CI/CD
 
-services:
-  postgres:
-    image: postgres:16
-    environment:
-      POSTGRES_USER: amigusto
-      POSTGRES_PASSWORD: dev_password
-      POSTGRES_DB: amigusto_dev
-    ports:
-      - "5432:5432"
-    volumes:
-      - postgres_data:/var/lib/postgresql/data
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+    branches: [main]
 
-  redis:
-    image: redis:7-alpine
-    ports:
-      - "6379:6379"
+jobs:
+  build:
+    runs-on: ubuntu-latest
 
-  api:
-    build: ./apps/api
-    ports:
-      - "3001:3001"
-    environment:
-      DATABASE_URL: postgresql://amigusto:dev_password@postgres:5432/amigusto_dev
-      REDIS_URL: redis://redis:6379
-    depends_on:
-      - postgres
-      - redis
-    volumes:
-      - ./apps/api:/app
-      - /app/node_modules
+    steps:
+      - uses: actions/checkout@v3
 
-volumes:
-  postgres_data:
+      - name: Set up JDK 17
+        uses: actions/setup-java@v3
+        with:
+          java-version: '17'
+          distribution: 'temurin'
+
+      - name: Build with Maven
+        run: ./mvnw clean install
+
+      - name: Run tests
+        run: ./mvnw test
+
+      - name: Build Docker image
+        run: docker build -t amigusto-backend .
 ```
 
-### 5.2 Scripts de package.json (Root)
+### 7.2 iOS (Xcode Cloud o Fastlane)
 
-```json
-{
-  "scripts": {
-    "dev": "turbo run dev",
-    "dev:api": "turbo run dev --filter=api",
-    "dev:web": "turbo run dev --filter=web-portal",
-    "dev:mobile": "turbo run dev --filter=mobile",
-    "build": "turbo run build",
-    "test": "turbo run test",
-    "lint": "turbo run lint",
-    "format": "prettier --write \"**/*.{ts,tsx,js,jsx,json,md}\"",
-    "db:studio": "cd packages/database && npx prisma studio",
-    "db:migrate": "cd packages/database && npx prisma migrate dev",
-    "db:seed": "cd packages/database && npx prisma db seed"
-  }
-}
+```ruby
+# Fastfile
+lane :test do
+  run_tests(scheme: "AmigustoiOS")
+end
+
+lane :beta do
+  build_app(scheme: "AmigustoiOS")
+  upload_to_testflight
+end
 ```
 
----
+### 7.3 Android (GitHub Actions)
 
-## 6. FLUJO DE TRABAJO GIT
+```yaml
+# .github/workflows/android-ci.yml
+name: Android CI
 
-### 6.1 Branching Strategy
+on: [push, pull_request]
 
-```
-main (producción)
-  ↑
-  └── staging (pre-producción)
-        ↑
-        └── develop (desarrollo)
-              ↑
-              ├── feature/nombre-feature
-              ├── bugfix/nombre-bug
-              └── hotfix/nombre-hotfix
-```
+jobs:
+  build:
+    runs-on: ubuntu-latest
 
-### 6.2 Convención de Commits (Conventional Commits)
+    steps:
+      - uses: actions/checkout@v3
 
-```
-tipo(scope): descripción
+      - name: Set up JDK 17
+        uses: actions/setup-java@v3
+        with:
+          java-version: '17'
 
-[cuerpo opcional]
+      - name: Build with Gradle
+        run: ./gradlew build
 
-[footer opcional]
-```
-
-**Tipos:**
-- `feat`: Nueva feature
-- `fix`: Bug fix
-- `docs`: Documentación
-- `style`: Cambios de formato (no afectan código)
-- `refactor`: Refactorización
-- `test`: Añadir o modificar tests
-- `chore`: Tareas de mantenimiento
-
-**Ejemplos:**
-
-```bash
-git commit -m "feat(mobile): add event card component"
-git commit -m "fix(api): resolve authentication bug"
-git commit -m "docs(readme): update setup instructions"
+      - name: Run tests
+        run: ./gradlew test
 ```
 
----
+### 7.4 Web (GitHub Actions)
 
-## 7. VARIABLES DE ENTORNO
+```yaml
+# .github/workflows/web-ci.yml
+name: Web CI/CD
 
-### 7.1 Backend API (`.env.example`)
+on: [push, pull_request]
 
-```bash
-# Server
-NODE_ENV=development
-PORT=3001
-API_BASE_URL=http://localhost:3001
+jobs:
+  build:
+    runs-on: ubuntu-latest
 
-# Database
-DATABASE_URL=postgresql://user:password@localhost:5432/amigusto_dev
+    steps:
+      - uses: actions/checkout@v3
 
-# Redis
-REDIS_URL=redis://localhost:6379
+      - name: Setup Node.js
+        uses: actions/setup-node@v3
+        with:
+          node-version: '18'
 
-# JWT
-JWT_SECRET=your-super-secret-jwt-key
-JWT_REFRESH_SECRET=your-super-secret-refresh-key
-JWT_EXPIRATION=15m
-JWT_REFRESH_EXPIRATION=7d
+      - name: Install dependencies
+        run: npm ci
 
-# AWS S3 (or Cloudinary)
-AWS_ACCESS_KEY_ID=
-AWS_SECRET_ACCESS_KEY=
-AWS_S3_BUCKET=amigusto-images
-AWS_REGION=us-east-1
+      - name: Lint
+        run: npm run lint
 
-# Cloudinary (alternativa)
-CLOUDINARY_CLOUD_NAME=
-CLOUDINARY_API_KEY=
-CLOUDINARY_API_SECRET=
+      - name: Test
+        run: npm test
 
-# Google Maps
-GOOGLE_MAPS_API_KEY=
-
-# Email (SendGrid)
-SENDGRID_API_KEY=
-FROM_EMAIL=noreply@amigusto.com
-
-# Sentry
-SENTRY_DSN=
-
-# Rate Limiting
-RATE_LIMIT_WINDOW_MS=60000
-RATE_LIMIT_MAX_REQUESTS=100
-```
-
-### 7.2 Next.js Apps (`.env.local`)
-
-```bash
-# API
-NEXT_PUBLIC_API_URL=http://localhost:3001
-
-# NextAuth
-NEXTAUTH_URL=http://localhost:3000
-NEXTAUTH_SECRET=your-nextauth-secret
-
-# Google Maps
-NEXT_PUBLIC_GOOGLE_MAPS_API_KEY=
-
-# Analytics
-NEXT_PUBLIC_GA_ID=
-```
-
-### 7.3 React Native (`.env`)
-
-```bash
-# API
-API_URL=http://localhost:3001
-
-# Expo
-EXPO_PROJECT_ID=
-
-# Firebase
-FIREBASE_API_KEY=
-FIREBASE_PROJECT_ID=
+      - name: Build
+        run: npm run build
 ```
 
 ---
 
-Este documento proporciona una visión completa de cómo organizar el proyecto Amigusto desde una perspectiva de arquitectura de código. La estructura propuesta es escalable y sigue las mejores prácticas de la industria.
+Esta arquitectura está 100% alineada con el stack actualizado: **Java Spring Boot, iOS nativo (Swift), Android nativo (Kotlin), y Angular**. No hay referencias a tecnologías obsoletas.

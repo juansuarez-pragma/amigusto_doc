@@ -10,29 +10,31 @@
 ```mermaid
 graph TB
     subgraph "CAPA DE CLIENTE"
-        Mobile["📱 App Móvil B2C<br/>(React Native)"]
-        Portal["💼 Portal Web B2B<br/>(Next.js)"]
-        Admin["⚙️ Panel Admin<br/>(Next.js)"]
+        iOS["📱 App iOS<br/>(Swift + SwiftUI)"]
+        Android["🤖 App Android<br/>(Kotlin + Compose)"]
+        Portal["💼 Portal Web B2B<br/>(Angular)"]
+        Admin["⚙️ Panel Admin<br/>(Angular)"]
     end
 
     subgraph "CAPA DE API"
-        Gateway["API Gateway<br/>(Kong/Nginx)"]
+        Gateway["API Gateway<br/>(Spring Cloud)"]
 
         subgraph "Servicios"
-            AuthAPI["Auth Service"]
-            EventsAPI["Events Service"]
-            ContentAPI["Content Service"]
+            AuthAPI["Auth Service<br/>(Spring Boot)"]
+            EventsAPI["Events Service<br/>(Spring Boot)"]
+            ContentAPI["Content Service<br/>(Spring Boot)"]
         end
     end
 
     subgraph "CAPA DE DATOS"
-        Postgres[(PostgreSQL<br/>Base de Datos)]
-        Redis[(Redis<br/>Cache)]
+        Postgres[(PostgreSQL 16<br/>+ PostGIS)]
+        Redis[(Redis 7<br/>Cache)]
         S3[("S3/Cloudinary<br/>Storage")]
         Search[(Elasticsearch<br/>Búsqueda)]
     end
 
-    Mobile --> Gateway
+    iOS --> Gateway
+    Android --> Gateway
     Portal --> Gateway
     Admin --> Gateway
 
@@ -48,8 +50,9 @@ graph TB
     ContentAPI --> Postgres
     ContentAPI --> S3
 
-    style Mobile fill:#4CAF50
-    style Portal fill:#2196F3
+    style iOS fill:#007AFF
+    style Android fill:#3DDC84
+    style Portal fill:#DD0031
     style Admin fill:#FF9800
     style Postgres fill:#336791
     style Redis fill:#DC382D
@@ -61,75 +64,81 @@ graph TB
 
 ```mermaid
 sequenceDiagram
-    participant P as 🏢 Promotor<br/>(Portal Web)
-    participant API as 🔧 Backend API
-    participant DB as 💾 Base de Datos
-    participant A as 👤 Admin<br/>(Panel Admin)
-    participant U as 📱 Usuario<br/>(App Móvil)
+    participant P as 🏢 Promotor<br/>(Portal Angular)
+    participant API as 🔧 Backend<br/>(Spring Boot)
+    participant DB as 💾 PostgreSQL
+    participant A as 👤 Admin<br/>(Panel Angular)
+    participant iOS as 📱 Usuario iOS<br/>(Swift)
+    participant Android as 🤖 Usuario Android<br/>(Kotlin)
 
-    Note over P,U: Flujo de Creación y Aprobación de Evento
+    Note over P,Android: Flujo de Creación y Aprobación de Evento
 
-    P->>API: 1. Crear evento (POST /promoter/events)
-    API->>DB: 2. Guardar evento con status="DRAFT"
+    P->>API: 1. Crear evento (POST /api/v1/promoter/events)
+    API->>DB: 2. Guardar con status="DRAFT"
     DB-->>API: Evento creado
     API-->>P: Confirmación
 
-    P->>API: 3. Enviar a revisión (POST /events/:id/submit-review)
+    P->>API: 3. Enviar a revisión (POST /events/{id}/submit-review)
     API->>DB: 4. Actualizar status="PENDING_REVIEW"
     DB-->>API: Status actualizado
     API-->>P: "Evento enviado a revisión"
 
     Note over A: Admin revisa el evento
 
-    A->>API: 5. Ver cola de aprobación (GET /admin/events?status=PENDING)
-    API->>DB: Consultar eventos pendientes
+    A->>API: 5. Ver cola (GET /api/v1/admin/events?status=PENDING)
+    API->>DB: Query eventos pendientes
     DB-->>API: Lista de eventos
     API-->>A: Eventos para revisar
 
-    A->>API: 6. Aprobar evento (POST /admin/events/:id/approve)
+    A->>API: 6. Aprobar evento (POST /api/v1/admin/events/{id}/approve)
     API->>DB: 7. Actualizar status="APPROVED"
-    API->>DB: 8. Setear publishedAt=now()
+    API->>DB: 8. Set publishedAt=now()
     DB-->>API: Evento aprobado
-    API->>P: 9. Enviar notificación por email
+    API->>P: 9. Email de notificación
     API-->>A: Confirmación
 
-    Note over U: Usuario descubre el evento
+    Note over iOS,Android: Usuarios descubren el evento
 
-    U->>API: 10. Buscar eventos (GET /events?city=Bogotá&gustos=cafe)
-    API->>DB: 11. Query con filtros (WHERE status=APPROVED)
+    iOS->>API: 10. GET /api/v1/events?city=Bogotá&gustos=cafe
+    API->>DB: 11. Query WHERE status=APPROVED
     DB-->>API: Eventos aprobados
-    API-->>U: Lista de eventos (incluyendo el nuevo)
+    API-->>iOS: Lista de eventos
 
-    Note over P,U: ✅ Evento ahora visible para usuarios
+    Android->>API: 12. GET /api/v1/events?city=Bogotá
+    API->>DB: Query eventos aprobados
+    DB-->>API: Eventos
+    API-->>Android: Lista de eventos
+
+    Note over P,Android: ✅ Evento visible en apps móviles
 ```
 
 ---
 
-## 3. FLUJO DE USUARIO EN LA APP MÓVIL
+## 3. FLUJO DE USUARIO EN LAS APPS MÓVILES
 
 ```mermaid
 graph LR
-    A[🚀 Abrir App] --> B{¿Primera vez?}
+    A[🚀 Abrir App<br/>iOS o Android] --> B{¿Primera vez?}
 
     B -->|Sí| C[📋 Onboarding:<br/>Seleccionar Gustos]
-    B -->|No| E[📍 Detectar Ubicación]
+    B -->|No| E[📍 Detectar<br/>Ubicación]
 
-    C --> D[💾 Guardar Gustos<br/>en Store]
+    C --> D[💾 Guardar Gustos<br/>CoreData/Room]
     D --> E
 
     E --> F[🔍 Feed de<br/>Descubrimiento]
 
-    F --> G{Acción del Usuario}
+    F --> G{Acción}
 
-    G -->|Click en evento| H[📄 Ver Detalle<br/>del Evento]
-    G -->|Scroll down| I[📥 Cargar más<br/>eventos]
-    G -->|Pull to refresh| J[🔄 Refrescar Feed]
+    G -->|Click evento| H[📄 Ver Detalle]
+    G -->|Scroll down| I[📥 Cargar más]
+    G -->|Pull refresh| J[🔄 Refrescar]
 
-    H --> K{Acción en Detalle}
+    H --> K{Acción Detalle}
 
     K -->|Guardar| L[💾 Añadir a<br/>Mis Planes]
-    K -->|Compartir| M[📤 Compartir vía<br/>WhatsApp/IG]
-    K -->|Ver en mapa| N[🗺️ Abrir Google Maps]
+    K -->|Compartir| M[📤 Share Sheet<br/>iOS/Android]
+    K -->|Ver mapa| N[🗺️ Abrir Maps]
 
     L --> O[✅ Guardado]
     M --> O
@@ -147,7 +156,7 @@ graph LR
 
 ---
 
-## 4. MODELO DE DATOS (ENTIDAD-RELACIÓN SIMPLIFICADO)
+## 4. MODELO DE DATOS (ENTITY-RELATIONSHIP)
 
 ```mermaid
 erDiagram
@@ -163,61 +172,60 @@ erDiagram
     CITY ||--o{ EVENT : "tiene"
 
     USER {
-        string id PK
-        string email UK
-        string name
+        uuid id PK
+        varchar email UK
+        varchar name
         enum role "CONSUMER|PROMOTER|ADMIN"
-        string city
-        float lat
-        float lng
+        varchar city
+        decimal lat
+        decimal lng
     }
 
     PROMOTER {
-        string id PK
-        string userId FK
-        string organizationName
+        uuid id PK
+        uuid userId FK
+        varchar organizationName
         enum status "PENDING|VERIFIED|SUSPENDED"
     }
 
     EVENT {
-        string id PK
-        string promoterId FK
-        string title
+        uuid id PK
+        uuid promoterId FK
+        varchar title
         text description
-        string imageUrl
-        datetime startDate
-        datetime endDate
-        string venueName
-        string venueAddress
-        string city
-        float lat
-        float lng
+        varchar imageUrl
+        timestamp startDate
+        timestamp endDate
+        varchar venueName
+        varchar city
+        decimal lat
+        decimal lng
         boolean isFree
-        float price
+        decimal price
         enum status "DRAFT|PENDING|APPROVED|REJECTED"
     }
 
     GUSTO {
-        string id PK
-        string name UK
-        string slug UK
-        string icon
-        string color
+        uuid id PK
+        varchar name UK
+        varchar slug UK
+        varchar icon
+        varchar color
     }
 
     SAVED_EVENT {
-        string id PK
-        string userId FK
-        string eventId FK
-        datetime createdAt
+        uuid id PK
+        uuid userId FK
+        uuid eventId FK
+        timestamp createdAt
     }
 
     CITY {
-        string id PK
-        string name UK
-        string slug UK
-        float lat
-        float lng
+        uuid id PK
+        varchar name UK
+        varchar slug UK
+        decimal lat
+        decimal lng
         boolean isActive
     }
 ```
@@ -230,31 +238,31 @@ erDiagram
 stateDiagram-v2
     [*] --> DRAFT: Promotor crea evento
 
-    DRAFT --> PENDING_REVIEW: Promotor envía a revisión
-    DRAFT --> DRAFT: Promotor edita
+    DRAFT --> PENDING_REVIEW: Enviar a revisión
+    DRAFT --> DRAFT: Editar
 
     PENDING_REVIEW --> APPROVED: Admin aprueba
     PENDING_REVIEW --> REJECTED: Admin rechaza
 
     REJECTED --> DRAFT: Promotor puede editar
 
-    APPROVED --> ENDED: Fecha del evento pasa
+    APPROVED --> ENDED: Fecha pasada
     APPROVED --> CANCELLED: Promotor cancela
 
     ENDED --> [*]
     CANCELLED --> [*]
 
     note right of DRAFT
-        Visible solo para el promotor
+        Visible solo para promotor
     end note
 
     note right of PENDING_REVIEW
         Visible para admins
-        No visible en app
+        NO visible en apps
     end note
 
     note right of APPROVED
-        ✅ VISIBLE EN APP MÓVIL
+        ✅ VISIBLE EN iOS Y ANDROID
         para usuarios finales
     end note
 
@@ -266,41 +274,41 @@ stateDiagram-v2
 
 ---
 
-## 6. ARQUITECTURA DE AUTENTICACIÓN
+## 6. ARQUITECTURA DE AUTENTICACIÓN (SPRING SECURITY + JWT)
 
 ```mermaid
 sequenceDiagram
-    participant C as Cliente<br/>(App/Web)
-    participant API as Backend API
+    participant C as Cliente<br/>(iOS/Android/Web)
+    participant API as Spring Boot API
     participant DB as PostgreSQL
     participant R as Redis
 
     Note over C,R: Flujo de Login
 
-    C->>API: POST /auth/login<br/>{email, password}
-    API->>DB: Buscar usuario por email
-    DB-->>API: Usuario encontrado
-    API->>API: Verificar password<br/>(bcrypt.compare)
+    C->>API: POST /api/v1/auth/login<br/>{email, password}
+    API->>DB: findByEmail(email)
+    DB-->>API: User entity
+    API->>API: BCrypt.matches(password)
 
     alt Password válido
-        API->>API: Generar Access Token (JWT)<br/>Expira en 15min
-        API->>API: Generar Refresh Token<br/>Expira en 7 días
-        API->>R: Guardar Refresh Token<br/>con userId
+        API->>API: Generar JWT Access Token<br/>(15min)
+        API->>API: Generar Refresh Token<br/>(7 días)
+        API->>R: Guardar refresh token
         R-->>API: OK
         API-->>C: {accessToken, refreshToken, user}
 
-        Note over C: Cliente guarda tokens<br/>localStorage/AsyncStorage
+        Note over C: Cliente guarda tokens<br/>Keychain(iOS)/DataStore(Android)
     else Password inválido
         API-->>C: 401 Unauthorized
     end
 
     Note over C,R: Uso del Access Token
 
-    C->>API: GET /events<br/>Header: Authorization Bearer <accessToken>
-    API->>API: Verificar JWT<br/>(jwt.verify)
+    C->>API: GET /api/v1/events<br/>Header: Authorization Bearer <token>
+    API->>API: JwtTokenProvider.validateToken()
 
     alt Token válido
-        API->>DB: Ejecutar query autorizado
+        API->>DB: Ejecutar query
         DB-->>API: Datos
         API-->>C: 200 OK {data}
     else Token expirado
@@ -310,8 +318,8 @@ sequenceDiagram
 
     Note over C,R: Renovación de Token
 
-    C->>API: POST /auth/refresh<br/>{refreshToken}
-    API->>R: Verificar Refresh Token
+    C->>API: POST /api/v1/auth/refresh<br/>{refreshToken}
+    API->>R: Verificar refresh token
     R-->>API: Token válido
     API->>API: Generar nuevo Access Token
     API-->>C: {accessToken}
@@ -319,20 +327,20 @@ sequenceDiagram
 
 ---
 
-## 7. FLUJO DE BÚSQUEDA GEOESPACIAL
+## 7. FLUJO DE BÚSQUEDA GEOESPACIAL (POSTGIS)
 
 ```mermaid
 flowchart TD
-    A[🔍 Usuario busca eventos] --> B[Obtener ubicación del usuario<br/>lat, lng, ciudad]
+    A[🔍 Usuario busca eventos] --> B[Obtener ubicación<br/>CoreLocation/FusedLocation]
 
-    B --> C[Obtener gustos seleccionados<br/>del usuario]
+    B --> C[Obtener gustos seleccionados]
 
     C --> D{¿Tiene lat/lng?}
 
-    D -->|Sí| E[Query con cálculo de distancia<br/>Haversine formula]
+    D -->|Sí| E[Query con PostGIS<br/>ST_DWithin function]
     D -->|No| F[Query simple por ciudad]
 
-    E --> G[Filtrar por:<br/>- status = APPROVED<br/>- ciudad = user.city<br/>- distancia <= radio<br/>- gustos IN user.gustos]
+    E --> G[Filtrar por:<br/>- status = APPROVED<br/>- ciudad = user.city<br/>- distancia <= radio km<br/>- gustos IN user.gustos]
 
     F --> H[Filtrar por:<br/>- status = APPROVED<br/>- ciudad = user.city<br/>- gustos IN user.gustos]
 
@@ -340,14 +348,14 @@ flowchart TD
 
     H --> J[Ordenar por:<br/>startDate ASC]
 
-    I --> K[Paginar resultados<br/>limit = 20]
+    I --> K[Paginación Spring Data<br/>Pageable interface]
     J --> K
 
-    K --> L[Incluir relaciones:<br/>- gustos<br/>- promoter info]
+    K --> L[Incluir relaciones JPA:<br/>@ManyToMany gustos<br/>@ManyToOne promoter]
 
-    L --> M[Devolver JSON con:<br/>events + pagination]
+    L --> M[ResponseEntity con:<br/>Page EventResponse]
 
-    M --> N[📱 Renderizar en Feed]
+    M --> N[📱 Renderizar en<br/>SwiftUI/Compose]
 
     style A fill:#4CAF50
     style E fill:#FF9800
@@ -373,84 +381,80 @@ flowchart LR
 
     G --> D
 
-    D --> I[Deploy API<br/>Railway/Render]
-    D --> J[Deploy Web<br/>Vercel]
-    D --> K[Run Migrations<br/>Prisma]
+    D --> I[Build Spring Boot JAR<br/>./mvnw package]
+    D --> J[Build Angular<br/>ng build]
+    D --> K[Test iOS<br/>xcodebuild test]
+    D --> L[Test Android<br/>./gradlew test]
 
-    I --> L[🧪 Staging Ready]
-    J --> L
-    K --> L
+    I --> M[🧪 Staging Ready]
+    J --> M
+    K --> M
+    L --> M
 
-    L --> M{¿Aprobado por QA?}
+    M --> N{¿Aprobado QA?}
 
-    M -->|Sí| N[Create Release]
-    M -->|No| O[🐛 Fix bugs]
+    N -->|Sí| O[Create Release]
+    N -->|No| P[🐛 Fix bugs]
 
-    O --> A
+    P --> A
 
-    N --> E
+    O --> E
 
-    E --> P[Deploy API<br/>Producción]
-    E --> Q[Deploy Web<br/>Producción]
-    E --> R[Build App<br/>Expo EAS]
+    E --> Q[Deploy Spring Boot<br/>AWS ECS/GCP]
+    E --> R[Deploy Angular<br/>Vercel/Netlify]
+    E --> S[Build iOS<br/>Fastlane + TestFlight]
+    E --> T[Build Android<br/>./gradlew bundle]
 
-    P --> S[🚀 Production Live]
-    Q --> S
-    R --> T[📦 Submit to Stores]
+    Q --> U[🚀 Production Live]
+    R --> U
+    S --> V[📦 App Store]
+    T --> W[📦 Google Play]
 
-    T --> U[🎉 App Live]
+    V --> X[🎉 Apps Live]
+    W --> X
 
     style A fill:#4CAF50
     style H fill:#F44336
-    style S fill:#2196F3
-    style U fill:#9C27B0
+    style U fill:#2196F3
+    style X fill:#9C27B0
 ```
 
 ---
 
-## 9. ARQUITECTURA DE MONOREPO (TURBOREPO)
+## 9. ARQUITECTURA MULTI-REPOSITORIO
 
 ```mermaid
 graph TB
-    subgraph "amigusto/ (Root)"
-        Root["package.json<br/>turbo.json"]
-
-        subgraph "apps/"
-            API["📦 api<br/>(Node.js + Express)"]
-            Mobile["📦 mobile<br/>(React Native)"]
-            Portal["📦 web-portal<br/>(Next.js)"]
-            Admin["📦 web-admin<br/>(Next.js)"]
-        end
-
-        subgraph "packages/"
-            Types["📦 types<br/>(TypeScript types)"]
-            UI["📦 ui<br/>(Shared components)"]
-            DB["📦 database<br/>(Prisma)"]
-            Utils["📦 utils<br/>(Helpers)"]
-        end
+    subgraph "Repositorios Git"
+        R1["📦 amigusto-backend<br/>(Java Spring Boot)"]
+        R2["📦 amigusto-ios<br/>(Swift + SwiftUI)"]
+        R3["📦 amigusto-android<br/>(Kotlin + Compose)"]
+        R4["📦 amigusto-web<br/>(Angular)"]
     end
 
-    API -.depende de.-> Types
-    API -.depende de.-> DB
-    API -.depende de.-> Utils
+    subgraph "Build & Deploy"
+        B1["Maven/Gradle<br/>Build JAR"]
+        B2["Xcode Build<br/>IPA"]
+        B3["Gradle Build<br/>APK/AAB"]
+        B4["Angular CLI<br/>Build Dist"]
+    end
 
-    Mobile -.depende de.-> Types
-    Mobile -.depende de.-> UI
-    Mobile -.depende de.-> Utils
+    subgraph "Hosting"
+        H1["AWS ECS<br/>Spring Boot"]
+        H2["TestFlight<br/>→ App Store"]
+        H3["Google Play<br/>Console"]
+        H4["Vercel<br/>Angular Apps"]
+    end
 
-    Portal -.depende de.-> Types
-    Portal -.depende de.-> UI
-    Portal -.depende de.-> Utils
+    R1 --> B1 --> H1
+    R2 --> B2 --> H2
+    R3 --> B3 --> H3
+    R4 --> B4 --> H4
 
-    Admin -.depende de.-> Types
-    Admin -.depende de.-> UI
-    Admin -.depende de.-> Utils
-
-    style API fill:#68A063
-    style Mobile fill:#61DAFB
-    style Portal fill:#000000,color:#fff
-    style Admin fill:#FF9800
-    style DB fill:#2D3748,color:#fff
+    style R1 fill:#68A063
+    style R2 fill:#FA7343
+    style R3 fill:#3DDC84
+    style R4 fill:#DD0031
 ```
 
 ---
@@ -460,29 +464,29 @@ graph TB
 ```mermaid
 graph LR
     subgraph "Fase 1: MVP<br/>(0-10K usuarios)"
-        MVP_API["Single Server<br/>Railway/Render"]
+        MVP_API["Single Spring Boot<br/>Railway/Render"]
         MVP_DB["PostgreSQL<br/>2GB RAM"]
         MVP_CDN["Cloudflare<br/>Free Tier"]
     end
 
     subgraph "Fase 2: Crecimiento<br/>(10K-100K usuarios)"
-        G_LB["Load Balancer"]
-        G_API1["API Server 1"]
-        G_API2["API Server 2"]
-        G_API3["API Server 3"]
+        G_LB["AWS ALB<br/>Load Balancer"]
+        G_API1["Spring Boot 1"]
+        G_API2["Spring Boot 2"]
+        G_API3["Spring Boot 3"]
         G_DB["PostgreSQL<br/>+ Read Replicas"]
         G_Redis["Redis Cluster"]
         G_CDN["CloudFront CDN"]
     end
 
     subgraph "Fase 3: Escala<br/>(100K-1M usuarios)"
-        S_MS1["Auth Service"]
-        S_MS2["Events Service"]
-        S_MS3["User Service"]
-        S_MQ["Message Queue<br/>RabbitMQ"]
+        S_MS1["Auth Service<br/>(Spring Boot)"]
+        S_MS2["Events Service<br/>(Spring Boot)"]
+        S_MS3["User Service<br/>(Spring Boot)"]
+        S_MQ["Message Queue<br/>RabbitMQ/Kafka"]
         S_DB["PostgreSQL<br/>Particionado"]
         S_ES["Elasticsearch"]
-        S_Cache["Redis Cluster<br/>+ Sharding"]
+        S_Cache["Redis<br/>Sharding"]
     end
 
     MVP_API --> G_LB
@@ -503,25 +507,30 @@ graph LR
 
 ---
 
-## 11. FLUJO DE ONBOARDING DE USUARIO
+## 11. FLUJO DE ONBOARDING EN APPS MÓVILES
 
 ```mermaid
 journey
-    title Experiencia de Onboarding - App Móvil
-    section Inicio
+    title Experiencia de Onboarding - Apps Nativas
+    section iOS (Swift)
       Abrir App: 5: Usuario
-      Ver Splash Screen: 3: Usuario
-      Pantalla de Bienvenida: 4: Usuario
-    section Configuración Inicial
-      Seleccionar Gustos (mínimo 3): 4: Usuario
-      Confirmar selección: 5: Usuario
-      Solicitar permisos de ubicación: 3: Usuario
-      Detectar ciudad automáticamente: 5: Sistema
+      Splash Screen (SwiftUI): 3: Usuario
+      Welcome View: 4: Usuario
+      Seleccionar Gustos: 4: Usuario
+      Solicitar Location Permission: 3: Usuario
+      Guardar en CoreData: 5: Sistema
+    section Android (Kotlin)
+      Abrir App: 5: Usuario
+      Splash Screen (Compose): 3: Usuario
+      Welcome Screen: 4: Usuario
+      Seleccionar Gustos: 4: Usuario
+      Solicitar Location Permission: 3: Usuario
+      Guardar en Room DB: 5: Sistema
     section Primera Experiencia
       Ver Feed personalizado: 5: Usuario
       Descubrir primer evento: 5: Usuario
       Guardar evento: 5: Usuario
-      Compartir con amigos: 5: Usuario
+      Share via Sistema: 5: Usuario
     section Retención
       Volver al día siguiente: 4: Usuario
       Ver nuevo contenido: 5: Usuario
@@ -529,55 +538,55 @@ journey
 
 ---
 
-## 12. MÉTRICAS Y OBSERVABILIDAD
+## 12. STACK TECNOLÓGICO COMPLETO
 
 ```mermaid
 graph TB
-    subgraph "Aplicaciones"
-        App["📱 Apps"]
-        API["🔧 API"]
-        DB["💾 BD"]
+    subgraph "Frontend Móvil"
+        iOS["iOS<br/>Swift 5.9<br/>SwiftUI<br/>Combine"]
+        Android["Android<br/>Kotlin 1.9<br/>Jetpack Compose<br/>Hilt"]
     end
 
-    subgraph "Recolección"
-        Logs["📝 Logs<br/>(Winston)"]
-        Metrics["📊 Metrics<br/>(Prometheus)"]
-        Traces["🔍 Traces<br/>(Sentry)"]
-        Analytics["📈 Analytics<br/>(Firebase/Mixpanel)"]
+    subgraph "Frontend Web"
+        Portal["Portal B2B<br/>Angular 17<br/>Material<br/>RxJS"]
+        Admin["Admin Panel<br/>Angular 17<br/>Material<br/>NgRx"]
     end
 
-    subgraph "Visualización"
-        Grafana["📊 Grafana<br/>Dashboards"]
-        Sentry["🐛 Sentry<br/>Error Tracking"]
-        Mixpanel["📈 Mixpanel<br/>Product Analytics"]
+    subgraph "Backend"
+        API["Spring Boot 3.2<br/>Java 17<br/>Spring Security<br/>Spring Data JPA"]
     end
 
-    subgraph "Alertas"
-        Slack["💬 Slack"]
-        Email["📧 Email"]
-        PagerDuty["📞 PagerDuty"]
+    subgraph "Bases de Datos"
+        PG["PostgreSQL 16<br/>+ PostGIS"]
+        RD["Redis 7<br/>Cache"]
+        ES["Elasticsearch 8<br/>Search"]
     end
 
-    App --> Logs
-    App --> Analytics
-    API --> Logs
-    API --> Metrics
-    API --> Traces
-    DB --> Metrics
+    subgraph "Infraestructura"
+        S3["S3/Cloudinary<br/>Storage"]
+        CDN["CloudFront<br/>CDN"]
+        Mon["Prometheus<br/>Grafana<br/>Sentry"]
+    end
 
-    Logs --> Grafana
-    Metrics --> Grafana
-    Traces --> Sentry
-    Analytics --> Mixpanel
+    iOS --> API
+    Android --> API
+    Portal --> API
+    Admin --> API
 
-    Grafana -.alerta.-> Slack
-    Grafana -.alerta.-> Email
-    Sentry -.alerta.-> Slack
-    Sentry -.alerta crítica.-> PagerDuty
+    API --> PG
+    API --> RD
+    API --> ES
+    API --> S3
 
-    style Grafana fill:#F46800
-    style Sentry fill:#362D59
-    style Mixpanel fill:#7856FF
+    S3 --> CDN
+    API --> Mon
+
+    style iOS fill:#007AFF
+    style Android fill:#3DDC84
+    style Portal fill:#DD0031
+    style Admin fill:#FF9800
+    style API fill:#6DB33F
+    style PG fill:#336791
 ```
 
 ---
@@ -598,4 +607,4 @@ Usar [Mermaid Live Editor](https://mermaid.live/) para exportar como PNG/SVG.
 
 ---
 
-**Nota:** Estos diagramas son representaciones simplificadas. Para detalles completos, consultar [PLAN_TECNICO_AMIGUSTO.md](./PLAN_TECNICO_AMIGUSTO.md).
+**Nota:** Estos diagramas reflejan la arquitectura actualizada con **Java Spring Boot** (backend), **Swift/SwiftUI** (iOS), **Kotlin/Jetpack Compose** (Android), y **Angular** (web). No hay referencias a tecnologías obsoletas.
