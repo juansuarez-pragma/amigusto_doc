@@ -653,6 +653,1051 @@ public class SecurityConfig {
 }
 ```
 
+### 8. Microservicios - Spring Cloud
+
+#### 8.1 Feign Client - Comunicación Síncrona entre Microservicios
+
+```java
+package com.amigusto.event.client;
+
+import com.amigusto.event.model.dto.PromoterResponse;
+import org.springframework.cloud.openfeign.FeignClient;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PathVariable;
+
+import java.util.UUID;
+
+/**
+ * Cliente Feign para comunicación con Promoter Service
+ *
+ * name: Nombre del servicio registrado en Eureka
+ * fallback: Clase que implementa lógica de fallback si el servicio falla
+ */
+@FeignClient(
+    name = "PROMOTER-SERVICE",
+    fallback = PromoterServiceFallback.class
+)
+public interface PromoterServiceClient {
+
+    @GetMapping("/api/v1/promoters/{id}")
+    PromoterResponse getPromoter(@PathVariable("id") UUID id);
+
+    @GetMapping("/api/v1/promoters/{id}/verify-status")
+    boolean isPromoterVerified(@PathVariable("id") UUID id);
+}
+```
+
+**Implementación de Fallback:**
+
+```java
+package com.amigusto.event.client;
+
+import com.amigusto.event.model.dto.PromoterResponse;
+import lombok.extern.slf4j.Slf4j;
+import org.springframework.stereotype.Component;
+
+import java.util.UUID;
+
+/**
+ * Fallback para PromoterServiceClient
+ * Se ejecuta cuando el servicio no está disponible
+ */
+@Component
+@Slf4j
+public class PromoterServiceFallback implements PromoterServiceClient {
+
+    @Override
+    public PromoterResponse getPromoter(UUID id) {
+        log.warn("Fallback activado para getPromoter({}). Servicio no disponible", id);
+
+        // Retornar datos por defecto o lanzar excepción custom
+        return PromoterResponse.builder()
+            .id(id)
+            .name("Promotor no disponible")
+            .verified(false)
+            .build();
+    }
+
+    @Override
+    public boolean isPromoterVerified(UUID id) {
+        log.warn("Fallback activado para isPromoterVerified({})", id);
+        // Por seguridad, retornar false si el servicio no responde
+        return false;
+    }
+}
+```
+
+**Configuración de Feign:**
+
+```java
+package com.amigusto.event.config;
+
+import feign.Logger;
+import feign.RequestInterceptor;
+import feign.codec.ErrorDecoder;
+import lombok.extern.slf4j.Slf4j;
+import org.springframework.context.annotation.Bean;
+import org.springframework.context.annotation.Configuration;
+import org.springframework.security.core.Authentication;
+import org.springframework.security.core.context.SecurityContextHolder;
+
+@Configuration
+@Slf4j
+public class FeignConfig {
+
+    /**
+     * Nivel de logging para requests Feign
+     */
+    @Bean
+    public Logger.Level feignLoggerLevel() {
+        return Logger.Level.FULL; // NONE, BASIC, HEADERS, FULL
+    }
+
+    /**
+     * Interceptor para propagar JWT entre microservicios
+     */
+    @Bean
+    public RequestInterceptor requestTokenBearerInterceptor() {
+        return requestTemplate -> {
+            Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
+
+            if (authentication != null && authentication.getCredentials() instanceof String) {
+                String token = (String) authentication.getCredentials();
+                requestTemplate.header("Authorization", "Bearer " + token);
+            }
+        };
+    }
+
+    /**
+     * Decoder personalizado para errores
+     */
+    @Bean
+    public ErrorDecoder errorDecoder() {
+        return (methodKey, response) -> {
+            log.error("Error en Feign call: {} - Status: {}", methodKey, response.status());
+            return new ErrorDecoder.Default().decode(methodKey, response);
+        };
+    }
+}
+```
+
+**Uso en Service con Circuit Breaker:**
+
+```java
+package com.amigusto.event.service;
+
+import com.amigusto.event.client.PromoterServiceClient;
+import com.amigusto.event.model.dto.PromoterResponse;
+import io.github.resilience4j.circuitbreaker.annotation.CircuitBreaker;
+import io.github.resilience4j.retry.annotation.Retry;
+import io.github.resilience4j.timelimiter.annotation.TimeLimiter;
+import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
+import org.springframework.stereotype.Service;
+
+import java.time.temporal.ChronoUnit;
+import java.util.UUID;
+import java.util.concurrent.CompletableFuture;
+
+@Service
+@RequiredArgsConstructor
+@Slf4j
+public class EventService {
+
+    private final PromoterServiceClient promoterClient;
+
+    /**
+     * Obtener promotor con Circuit Breaker, Retry y Timeout
+     *
+     * @CircuitBreaker: Si falla 50% de requests, abre el circuito
+     * @Retry: Reintentar 3 veces con backoff exponencial
+     * @TimeLimiter: Timeout de 3 segundos
+     */
+    @CircuitBreaker(name = "promoterService", fallbackMethod = "getPromoterFallback")
+    @Retry(name = "promoterService")
+    @TimeLimiter(name = "promoterService")
+    public CompletableFuture<PromoterResponse> getPromoterAsync(UUID promoterId) {
+        log.info("Llamando a Promoter Service para obtener promotor: {}", promoterId);
+
+        return CompletableFuture.supplyAsync(() ->
+            promoterClient.getPromoter(promoterId)
+        );
+    }
+
+    /**
+     * Fallback method - debe tener misma firma + Throwable
+     */
+    private CompletableFuture<PromoterResponse> getPromoterFallback(
+            UUID promoterId,
+            Throwable throwable) {
+
+        log.error("Circuit breaker abierto para getPromoter({}): {}",
+            promoterId, throwable.getMessage());
+
+        return CompletableFuture.completedFuture(
+            PromoterResponse.builder()
+                .id(promoterId)
+                .name("Información temporalmente no disponible")
+                .verified(false)
+                .build()
+        );
+    }
+}
+```
+
+**Configuración de Resilience4j:**
+
+```yaml
+# application.yml
+resilience4j:
+  circuitbreaker:
+    instances:
+      promoterService:
+        registerHealthIndicator: true
+        slidingWindowSize: 10                    # Ventana de 10 requests
+        failureRateThreshold: 50                 # Abre circuito si falla >50%
+        waitDurationInOpenState: 10s             # Esperar 10s antes de probar
+        permittedNumberOfCallsInHalfOpenState: 3 # Permitir 3 calls en half-open
+        automaticTransitionFromOpenToHalfOpenEnabled: true
+
+  retry:
+    instances:
+      promoterService:
+        maxAttempts: 3                           # Reintentar máximo 3 veces
+        waitDuration: 500ms                      # Esperar 500ms entre intentos
+        enableExponentialBackoff: true           # Backoff exponencial
+        exponentialBackoffMultiplier: 2          # 500ms -> 1s -> 2s
+        retryExceptions:
+          - org.springframework.web.client.HttpServerErrorException
+          - java.io.IOException
+
+  timelimiter:
+    instances:
+      promoterService:
+        timeoutDuration: 3s                      # Timeout de 3 segundos
+```
+
+#### 8.2 RabbitMQ - Comunicación Asíncrona
+
+**Configuración de RabbitMQ:**
+
+```java
+package com.amigusto.event.config;
+
+import org.springframework.amqp.core.*;
+import org.springframework.amqp.rabbit.connection.ConnectionFactory;
+import org.springframework.amqp.rabbit.core.RabbitTemplate;
+import org.springframework.amqp.support.converter.Jackson2JsonMessageConverter;
+import org.springframework.context.annotation.Bean;
+import org.springframework.context.annotation.Configuration;
+
+@Configuration
+public class RabbitMQConfig {
+
+    // Exchange names
+    public static final String EVENT_EXCHANGE = "event.events";
+    public static final String USER_EXCHANGE = "user.events";
+
+    // Queue names
+    public static final String EVENT_APPROVED_QUEUE = "notification-service.event.approved";
+    public static final String EVENT_CREATED_QUEUE = "promoter-service.event.created";
+    public static final String EVENT_SAVED_QUEUE = "event-service.event.saved";
+
+    // Routing keys
+    public static final String EVENT_APPROVED_KEY = "event.approved";
+    public static final String EVENT_CREATED_KEY = "event.created";
+    public static final String EVENT_SAVED_KEY = "event.saved";
+
+    /**
+     * Topic Exchange para eventos de Event Service
+     */
+    @Bean
+    public TopicExchange eventExchange() {
+        return new TopicExchange(EVENT_EXCHANGE, true, false);
+    }
+
+    /**
+     * Queue para eventos aprobados (Notification Service)
+     */
+    @Bean
+    public Queue eventApprovedQueue() {
+        return QueueBuilder.durable(EVENT_APPROVED_QUEUE)
+            .withArgument("x-dead-letter-exchange", "dlx.events")
+            .withArgument("x-message-ttl", 3600000) // 1 hora TTL
+            .build();
+    }
+
+    /**
+     * Binding de queue con exchange y routing key
+     */
+    @Bean
+    public Binding eventApprovedBinding() {
+        return BindingBuilder
+            .bind(eventApprovedQueue())
+            .to(eventExchange())
+            .with(EVENT_APPROVED_KEY);
+    }
+
+    /**
+     * Converter para serializar/deserializar mensajes como JSON
+     */
+    @Bean
+    public Jackson2JsonMessageConverter messageConverter() {
+        return new Jackson2JsonMessageConverter();
+    }
+
+    /**
+     * RabbitTemplate configurado con converter JSON
+     */
+    @Bean
+    public RabbitTemplate rabbitTemplate(ConnectionFactory connectionFactory) {
+        RabbitTemplate template = new RabbitTemplate(connectionFactory);
+        template.setMessageConverter(messageConverter());
+        return template;
+    }
+}
+```
+
+**Publisher - Publicar Eventos:**
+
+```java
+package com.amigusto.event.messaging;
+
+import com.amigusto.event.config.RabbitMQConfig;
+import com.amigusto.event.model.entity.Event;
+import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
+import org.springframework.amqp.rabbit.core.RabbitTemplate;
+import org.springframework.stereotype.Component;
+
+import java.time.LocalDateTime;
+import java.util.UUID;
+
+@Component
+@RequiredArgsConstructor
+@Slf4j
+public class EventPublisher {
+
+    private final RabbitTemplate rabbitTemplate;
+
+    /**
+     * Publicar evento cuando un evento es aprobado
+     */
+    public void publishEventApproved(Event event) {
+        EventApprovedMessage message = EventApprovedMessage.builder()
+            .eventId(event.getId())
+            .promoterId(event.getPromoter().getId())
+            .title(event.getTitle())
+            .city(event.getCity())
+            .startDate(event.getStartDate())
+            .approvedAt(event.getReviewedAt())
+            .build();
+
+        log.info("Publicando evento aprobado: {} a exchange: {}",
+            event.getId(), RabbitMQConfig.EVENT_EXCHANGE);
+
+        rabbitTemplate.convertAndSend(
+            RabbitMQConfig.EVENT_EXCHANGE,
+            RabbitMQConfig.EVENT_APPROVED_KEY,
+            message
+        );
+    }
+
+    /**
+     * Publicar evento cuando un evento es creado
+     */
+    public void publishEventCreated(Event event) {
+        EventCreatedMessage message = EventCreatedMessage.builder()
+            .eventId(event.getId())
+            .promoterId(event.getPromoter().getId())
+            .title(event.getTitle())
+            .createdAt(event.getCreatedAt())
+            .build();
+
+        log.info("Publicando evento creado: {}", event.getId());
+
+        rabbitTemplate.convertAndSend(
+            RabbitMQConfig.EVENT_EXCHANGE,
+            RabbitMQConfig.EVENT_CREATED_KEY,
+            message
+        );
+    }
+}
+```
+
+**Message DTOs:**
+
+```java
+package com.amigusto.event.messaging;
+
+import lombok.AllArgsConstructor;
+import lombok.Builder;
+import lombok.Data;
+import lombok.NoArgsConstructor;
+
+import java.io.Serializable;
+import java.time.LocalDateTime;
+import java.util.UUID;
+
+@Data
+@Builder
+@NoArgsConstructor
+@AllArgsConstructor
+public class EventApprovedMessage implements Serializable {
+    private UUID eventId;
+    private UUID promoterId;
+    private String title;
+    private String city;
+    private LocalDateTime startDate;
+    private LocalDateTime approvedAt;
+}
+
+@Data
+@Builder
+@NoArgsConstructor
+@AllArgsConstructor
+public class EventCreatedMessage implements Serializable {
+    private UUID eventId;
+    private UUID promoterId;
+    private String title;
+    private LocalDateTime createdAt;
+}
+```
+
+**Consumer - Consumir Eventos:**
+
+```java
+package com.amigusto.notification.messaging;
+
+import com.amigusto.notification.service.NotificationService;
+import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
+import org.springframework.amqp.rabbit.annotation.RabbitListener;
+import org.springframework.stereotype.Component;
+
+import java.util.UUID;
+
+@Component
+@RequiredArgsConstructor
+@Slf4j
+public class EventMessageConsumer {
+
+    private final NotificationService notificationService;
+
+    /**
+     * Consumir mensajes de eventos aprobados
+     *
+     * @RabbitListener: Escucha la queue especificada
+     * containerFactory: Configuración de contenedor de listeners
+     */
+    @RabbitListener(
+        queues = "notification-service.event.approved",
+        containerFactory = "rabbitListenerContainerFactory"
+    )
+    public void handleEventApproved(EventApprovedMessage message) {
+        log.info("Recibido evento aprobado: {}", message.getEventId());
+
+        try {
+            // Enviar notificación al promotor
+            notificationService.sendEventApprovedEmail(
+                message.getPromoterId(),
+                message.getEventId(),
+                message.getTitle()
+            );
+
+            log.info("Notificación enviada para evento: {}", message.getEventId());
+
+        } catch (Exception e) {
+            log.error("Error procesando evento aprobado: {}", message.getEventId(), e);
+            // El mensaje será enviado a DLQ automáticamente si falla
+            throw e;
+        }
+    }
+
+    /**
+     * Consumir mensajes de eventos creados
+     */
+    @RabbitListener(queues = "promoter-service.event.created")
+    public void handleEventCreated(EventCreatedMessage message) {
+        log.info("Recibido evento creado: {}", message.getEventId());
+
+        try {
+            // Actualizar métricas del promotor
+            notificationService.incrementPromoterEventCount(message.getPromoterId());
+
+        } catch (Exception e) {
+            log.error("Error procesando evento creado: {}", message.getEventId(), e);
+            throw e;
+        }
+    }
+}
+```
+
+**Configuración de Listener:**
+
+```java
+package com.amigusto.notification.config;
+
+import org.springframework.amqp.rabbit.config.SimpleRabbitListenerContainerFactory;
+import org.springframework.amqp.rabbit.connection.ConnectionFactory;
+import org.springframework.amqp.support.converter.Jackson2JsonMessageConverter;
+import org.springframework.context.annotation.Bean;
+import org.springframework.context.annotation.Configuration;
+
+@Configuration
+public class RabbitListenerConfig {
+
+    @Bean
+    public SimpleRabbitListenerContainerFactory rabbitListenerContainerFactory(
+            ConnectionFactory connectionFactory,
+            Jackson2JsonMessageConverter messageConverter) {
+
+        SimpleRabbitListenerContainerFactory factory =
+            new SimpleRabbitListenerContainerFactory();
+
+        factory.setConnectionFactory(connectionFactory);
+        factory.setMessageConverter(messageConverter);
+        factory.setConcurrentConsumers(3);      // 3 consumers concurrentes
+        factory.setMaxConcurrentConsumers(10);  // Máximo 10 consumers
+        factory.setPrefetchCount(10);           // Prefetch 10 mensajes
+        factory.setDefaultRequeueRejected(false); // No requeue si falla (va a DLQ)
+
+        return factory;
+    }
+}
+```
+
+#### 8.3 Service Discovery - Eureka Client
+
+**Configuración de Eureka Client:**
+
+```yaml
+# bootstrap.yml (cada microservicio)
+spring:
+  application:
+    name: event-service  # Nombre único del servicio
+
+eureka:
+  client:
+    serviceUrl:
+      defaultZone: http://localhost:8761/eureka/
+    registerWithEureka: true
+    fetchRegistry: true
+    healthcheck:
+      enabled: true
+  instance:
+    preferIpAddress: true
+    leaseRenewalIntervalInSeconds: 30    # Heartbeat cada 30s
+    leaseExpirationDurationInSeconds: 90 # Expira si no hay heartbeat en 90s
+    metadata-map:
+      version: 1.0.0
+      environment: ${spring.profiles.active:dev}
+```
+
+**Enable Eureka Client:**
+
+```java
+package com.amigusto.event;
+
+import org.springframework.boot.SpringApplication;
+import org.springframework.boot.autoconfigure.SpringBootApplication;
+import org.springframework.cloud.netflix.eureka.EnableEurekaClient;
+import org.springframework.cloud.openfeign.EnableFeignClients;
+
+@SpringBootApplication
+@EnableEurekaClient      // Habilita cliente Eureka
+@EnableFeignClients      // Habilita clientes Feign
+public class EventServiceApplication {
+    public static void main(String[] args) {
+        SpringApplication.run(EventServiceApplication.class, args);
+    }
+}
+```
+
+#### 8.4 Distributed Tracing - Sleuth + Zipkin
+
+**Configuración de Sleuth:**
+
+```yaml
+# application.yml
+spring:
+  sleuth:
+    sampler:
+      probability: 1.0  # 100% en dev, 0.1 (10%) en producción
+  zipkin:
+    base-url: http://localhost:9411
+    sender:
+      type: web
+
+logging:
+  pattern:
+    level: "%5p [${spring.application.name:},%X{traceId:-},%X{spanId:-}]"
+```
+
+**Dependencias Maven:**
+
+```xml
+<dependency>
+    <groupId>org.springframework.cloud</groupId>
+    <artifactId>spring-cloud-starter-sleuth</artifactId>
+</dependency>
+<dependency>
+    <groupId>org.springframework.cloud</groupId>
+    <artifactId>spring-cloud-sleuth-zipkin</artifactId>
+</dependency>
+```
+
+**Logs con Trace ID:**
+
+```java
+package com.amigusto.event.service;
+
+import lombok.extern.slf4j.Slf4j;
+import org.springframework.stereotype.Service;
+
+@Service
+@Slf4j
+public class EventService {
+
+    public void createEvent(EventRequest request) {
+        // Sleuth automáticamente agrega traceId y spanId a los logs
+        log.info("Creando evento: {}", request.getTitle());
+
+        // Llamadas a otros servicios propagarán el trace ID
+        promoterClient.getPromoter(request.getPromoterId());
+
+        log.info("Evento creado exitosamente");
+        // Logs se verán como:
+        // INFO [event-service,abc123,def456] Creando evento: Concierto
+    }
+}
+```
+
+#### 8.5 API Gateway - Filtros Personalizados
+
+**Global Filter - Logging:**
+
+```java
+package com.amigusto.gateway.filter;
+
+import lombok.extern.slf4j.Slf4j;
+import org.springframework.cloud.gateway.filter.GatewayFilterChain;
+import org.springframework.cloud.gateway.filter.GlobalFilter;
+import org.springframework.core.Ordered;
+import org.springframework.http.HttpHeaders;
+import org.springframework.stereotype.Component;
+import org.springframework.web.server.ServerWebExchange;
+import reactor.core.publisher.Mono;
+
+import java.time.Instant;
+
+@Component
+@Slf4j
+public class LoggingGlobalFilter implements GlobalFilter, Ordered {
+
+    @Override
+    public Mono<Void> filter(ServerWebExchange exchange, GatewayFilterChain chain) {
+        long startTime = Instant.now().toEpochMilli();
+        String path = exchange.getRequest().getPath().toString();
+        String method = exchange.getRequest().getMethod().toString();
+
+        log.info("Request: {} {}", method, path);
+
+        return chain.filter(exchange)
+            .then(Mono.fromRunnable(() -> {
+                long duration = Instant.now().toEpochMilli() - startTime;
+                int statusCode = exchange.getResponse().getStatusCode().value();
+
+                log.info("Response: {} {} - Status: {} - Duration: {}ms",
+                    method, path, statusCode, duration);
+            }));
+    }
+
+    @Override
+    public int getOrder() {
+        return Ordered.LOWEST_PRECEDENCE; // Ejecutar al final
+    }
+}
+```
+
+**Gateway Filter - JWT Validation:**
+
+```java
+package com.amigusto.gateway.filter;
+
+import com.amigusto.gateway.util.JwtUtil;
+import lombok.extern.slf4j.Slf4j;
+import org.springframework.cloud.gateway.filter.GatewayFilter;
+import org.springframework.cloud.gateway.filter.factory.AbstractGatewayFilterFactory;
+import org.springframework.http.HttpHeaders;
+import org.springframework.http.HttpStatus;
+import org.springframework.stereotype.Component;
+import org.springframework.web.server.ServerWebExchange;
+import reactor.core.publisher.Mono;
+
+@Component
+@Slf4j
+public class JwtAuthenticationFilter
+        extends AbstractGatewayFilterFactory<JwtAuthenticationFilter.Config> {
+
+    private final JwtUtil jwtUtil;
+
+    public JwtAuthenticationFilter(JwtUtil jwtUtil) {
+        super(Config.class);
+        this.jwtUtil = jwtUtil;
+    }
+
+    @Override
+    public GatewayFilter apply(Config config) {
+        return (exchange, chain) -> {
+            String path = exchange.getRequest().getPath().toString();
+
+            // Skip JWT validation para rutas públicas
+            if (isPublicPath(path)) {
+                return chain.filter(exchange);
+            }
+
+            // Extraer token JWT del header
+            String token = extractToken(exchange);
+
+            if (token == null || !jwtUtil.validateToken(token)) {
+                log.warn("Token JWT inválido o ausente para: {}", path);
+                exchange.getResponse().setStatusCode(HttpStatus.UNAUTHORIZED);
+                return exchange.getResponse().setComplete();
+            }
+
+            // Agregar userId al header para downstream services
+            String userId = jwtUtil.extractUserId(token);
+            ServerWebExchange mutatedExchange = exchange.mutate()
+                .request(r -> r.header("X-User-Id", userId))
+                .build();
+
+            log.info("Request autenticado para userId: {}", userId);
+
+            return chain.filter(mutatedExchange);
+        };
+    }
+
+    private String extractToken(ServerWebExchange exchange) {
+        String authHeader = exchange.getRequest()
+            .getHeaders()
+            .getFirst(HttpHeaders.AUTHORIZATION);
+
+        if (authHeader != null && authHeader.startsWith("Bearer ")) {
+            return authHeader.substring(7);
+        }
+        return null;
+    }
+
+    private boolean isPublicPath(String path) {
+        return path.startsWith("/api/v1/auth") ||
+               path.startsWith("/api/v1/gustos") ||
+               path.contains("/swagger") ||
+               path.contains("/actuator/health");
+    }
+
+    public static class Config {
+        // Configuración del filtro si es necesaria
+    }
+}
+```
+
+**Rate Limiting Filter:**
+
+```java
+package com.amigusto.gateway.filter;
+
+import io.github.bucket4j.Bandwidth;
+import io.github.bucket4j.Bucket;
+import io.github.bucket4j.Bucket4j;
+import io.github.bucket4j.Refill;
+import lombok.extern.slf4j.Slf4j;
+import org.springframework.cloud.gateway.filter.GatewayFilter;
+import org.springframework.cloud.gateway.filter.factory.AbstractGatewayFilterFactory;
+import org.springframework.http.HttpStatus;
+import org.springframework.stereotype.Component;
+
+import java.time.Duration;
+import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
+
+@Component
+@Slf4j
+public class RateLimitingFilter
+        extends AbstractGatewayFilterFactory<RateLimitingFilter.Config> {
+
+    private final Map<String, Bucket> cache = new ConcurrentHashMap<>();
+
+    public RateLimitingFilter() {
+        super(Config.class);
+    }
+
+    @Override
+    public GatewayFilter apply(Config config) {
+        return (exchange, chain) -> {
+            String clientId = exchange.getRequest()
+                .getHeaders()
+                .getFirst("X-User-Id");
+
+            if (clientId == null) {
+                clientId = exchange.getRequest()
+                    .getRemoteAddress()
+                    .getAddress()
+                    .getHostAddress();
+            }
+
+            Bucket bucket = resolveBucket(clientId, config);
+
+            if (bucket.tryConsume(1)) {
+                return chain.filter(exchange);
+            } else {
+                log.warn("Rate limit excedido para: {}", clientId);
+                exchange.getResponse().setStatusCode(HttpStatus.TOO_MANY_REQUESTS);
+                return exchange.getResponse().setComplete();
+            }
+        };
+    }
+
+    private Bucket resolveBucket(String clientId, Config config) {
+        return cache.computeIfAbsent(clientId, key -> {
+            Bandwidth limit = Bandwidth.classic(
+                config.getCapacity(),
+                Refill.intervally(
+                    config.getCapacity(),
+                    Duration.ofMinutes(config.getRefillMinutes())
+                )
+            );
+            return Bucket4j.builder().addLimit(limit).build();
+        });
+    }
+
+    public static class Config {
+        private long capacity = 100;        // 100 requests
+        private long refillMinutes = 1;     // por minuto
+
+        public long getCapacity() { return capacity; }
+        public void setCapacity(long capacity) { this.capacity = capacity; }
+
+        public long getRefillMinutes() { return refillMinutes; }
+        public void setRefillMinutes(long refillMinutes) {
+            this.refillMinutes = refillMinutes;
+        }
+    }
+}
+```
+
+**Configuración de Routes en API Gateway:**
+
+```yaml
+# application.yml (API Gateway)
+spring:
+  cloud:
+    gateway:
+      routes:
+        # Event Service
+        - id: event-service
+          uri: lb://EVENT-SERVICE  # Load balanced via Eureka
+          predicates:
+            - Path=/api/v1/events/**
+          filters:
+            - name: JwtAuthenticationFilter
+            - name: RateLimitingFilter
+              args:
+                capacity: 100
+                refillMinutes: 1
+            - RewritePath=/api/v1/events/(?<segment>.*), /${segment}
+
+        # Auth Service (público)
+        - id: auth-service
+          uri: lb://AUTH-SERVICE
+          predicates:
+            - Path=/api/v1/auth/**
+          filters:
+            - RewritePath=/api/v1/auth/(?<segment>.*), /${segment}
+
+        # User Service
+        - id: user-service
+          uri: lb://USER-SERVICE
+          predicates:
+            - Path=/api/v1/users/**,/api/v1/saved-events/**
+          filters:
+            - name: JwtAuthenticationFilter
+            - name: RateLimitingFilter
+              args:
+                capacity: 200
+                refillMinutes: 1
+
+      # Global CORS Configuration
+      globalcors:
+        corsConfigurations:
+          '[/**]':
+            allowedOrigins:
+              - "http://localhost:4200"
+              - "https://app.amigusto.com"
+            allowedMethods:
+              - GET
+              - POST
+              - PUT
+              - DELETE
+              - PATCH
+            allowedHeaders: "*"
+            allowCredentials: true
+```
+
+#### 8.6 Config Server - Configuración Centralizada
+
+**Config Server Application:**
+
+```java
+package com.amigusto.configserver;
+
+import org.springframework.boot.SpringApplication;
+import org.springframework.boot.autoconfigure.SpringBootApplication;
+import org.springframework.cloud.config.server.EnableConfigServer;
+
+@SpringBootApplication
+@EnableConfigServer
+public class ConfigServerApplication {
+    public static void main(String[] args) {
+        SpringApplication.run(ConfigServerApplication.class, args);
+    }
+}
+```
+
+**Configuración de Config Server:**
+
+```yaml
+# application.yml (Config Server)
+server:
+  port: 8888
+
+spring:
+  application:
+    name: config-server
+  cloud:
+    config:
+      server:
+        git:
+          uri: https://github.com/amigusto/config-repo
+          default-label: main
+          clone-on-start: true
+          search-paths:
+            - '{application}'
+          # Autenticación si es repo privado
+          username: ${GIT_USERNAME}
+          password: ${GIT_PASSWORD}
+
+eureka:
+  client:
+    serviceUrl:
+      defaultZone: http://localhost:8761/eureka/
+```
+
+**Estructura del repositorio de configuración:**
+
+```
+config-repo/
+├── application.yml              # Configuración común a todos
+├── application-dev.yml          # Común para dev
+├── application-prod.yml         # Común para prod
+├── event-service/
+│   ├── event-service.yml        # Config específico de event-service
+│   ├── event-service-dev.yml
+│   └── event-service-prod.yml
+├── auth-service/
+│   ├── auth-service.yml
+│   ├── auth-service-dev.yml
+│   └── auth-service-prod.yml
+└── api-gateway/
+    ├── api-gateway.yml
+    ├── api-gateway-dev.yml
+    └── api-gateway-prod.yml
+```
+
+**Ejemplo de configuración compartida (application.yml):**
+
+```yaml
+# application.yml (en repositorio Git)
+spring:
+  datasource:
+    driver-class-name: org.postgresql.Driver
+    hikari:
+      maximum-pool-size: 10
+      minimum-idle: 5
+  jpa:
+    hibernate:
+      ddl-auto: validate
+    show-sql: false
+    properties:
+      hibernate:
+        format_sql: true
+
+  rabbitmq:
+    host: ${RABBITMQ_HOST:localhost}
+    port: ${RABBITMQ_PORT:5672}
+    username: ${RABBITMQ_USERNAME:guest}
+    password: ${RABBITMQ_PASSWORD:guest}
+
+  redis:
+    host: ${REDIS_HOST:localhost}
+    port: ${REDIS_PORT:6379}
+
+logging:
+  level:
+    root: INFO
+    com.amigusto: DEBUG
+```
+
+**Client Configuration (bootstrap.yml en cada microservicio):**
+
+```yaml
+# bootstrap.yml (en cada microservicio)
+spring:
+  application:
+    name: event-service
+  cloud:
+    config:
+      uri: http://localhost:8888
+      fail-fast: true
+      retry:
+        max-attempts: 6
+        initial-interval: 1000
+        multiplier: 1.5
+  profiles:
+    active: ${SPRING_PROFILES_ACTIVE:dev}
+```
+
+**Refresh Configuration Endpoint:**
+
+```java
+package com.amigusto.event.controller;
+
+import org.springframework.cloud.context.config.annotation.RefreshScope;
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.RestController;
+
+@RestController
+@RefreshScope  // Permite refrescar configuración sin reiniciar
+public class ConfigTestController {
+
+    @Value("${app.feature.newFeatureEnabled:false}")
+    private boolean newFeatureEnabled;
+
+    @GetMapping("/config/status")
+    public String getConfigStatus() {
+        return "New feature enabled: " + newFeatureEnabled;
+    }
+}
+```
+
+**Refrescar configuración sin reiniciar:**
+
+```bash
+# POST request para refrescar configuración
+curl -X POST http://localhost:8082/actuator/refresh
+```
+
 ---
 
 ## iOS - Swift + SwiftUI

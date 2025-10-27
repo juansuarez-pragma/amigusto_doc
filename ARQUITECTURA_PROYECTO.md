@@ -1,174 +1,479 @@
 # Arquitectura de Proyecto - Amigusto
-## Estructura de Repositorios y Organización del Código
+## Estructura de Microservicios y Organización del Código
 
 ---
 
 ## 1. ESTRUCTURA GENERAL DE REPOSITORIOS
 
-### 1.1 Enfoque Recomendado: 4 Repositorios Separados
+### 1.1 Enfoque Recomendado: Repositorios Separados por Componente
 
 ```
-amigusto-backend/        (Java Spring Boot)
-amigusto-ios/           (Swift + SwiftUI)
-amigusto-android/       (Kotlin + Jetpack Compose)
-amigusto-web/           (Angular - Portal + Admin)
+amigusto-microservices/     (Backend - Arquitectura Microservicios)
+amigusto-ios/               (Swift + SwiftUI)
+amigusto-android/           (Kotlin + Jetpack Compose)
+amigusto-web/               (Angular - Portal + Admin)
+config-repo/                (Configuración centralizada para Config Server)
 ```
 
 **Justificación:**
-- ✅ Cada equipo trabaja independientemente
-- ✅ CI/CD específico por plataforma
-- ✅ Control de versiones independiente
+- ✅ Backend de microservicios en un solo repo (monorepo de microservicios)
+- ✅ Cada plataforma cliente independiente
+- ✅ CI/CD específico por repositorio
+- ✅ Config Server con repo Git separado
 - ✅ Releases independientes
 - ✅ Permisos granulares por repositorio
 
-### 1.2 Alternativa: Monorepo (No Recomendado para este Stack)
+### 1.2 Alternativa: Monorepo Completo (No Recomendado)
 
-Si prefieres un monorepo, sería más complejo porque mezcla tecnologías muy diferentes (Java, Swift, Kotlin, TypeScript).
+Incluir backend + frontend en un solo repo es complejo porque mezcla tecnologías muy diferentes (Java, Swift, Kotlin, TypeScript) y requiere herramientas especializadas como Nx o Turborepo.
 
 ---
 
-## 2. ESTRUCTURA DEL BACKEND (JAVA SPRING BOOT)
+## 2. ESTRUCTURA DEL BACKEND (MICROSERVICIOS)
 
-### 2.1 Estructura Completa
+### 2.1 Estructura Completa del Repositorio
 
 ```
-amigusto-backend/
-├── src/
-│   ├── main/
-│   │   ├── java/
-│   │   │   └── com/
-│   │   │       └── amigusto/
-│   │   │           ├── AmigustoApplication.java
-│   │   │           │
-│   │   │           ├── config/
-│   │   │           │   ├── SecurityConfig.java
-│   │   │           │   ├── JwtConfig.java
-│   │   │           │   ├── RedisConfig.java
-│   │   │           │   ├── S3Config.java
-│   │   │           │   ├── CorsConfig.java
-│   │   │           │   └── OpenApiConfig.java
-│   │   │           │
-│   │   │           ├── controller/
-│   │   │           │   ├── AuthController.java
-│   │   │           │   ├── EventController.java
-│   │   │           │   ├── GustoController.java
-│   │   │           │   ├── UserController.java
-│   │   │           │   ├── PromoterController.java
-│   │   │           │   └── AdminController.java
-│   │   │           │
-│   │   │           ├── service/
-│   │   │           │   ├── AuthService.java
-│   │   │           │   ├── EventService.java
-│   │   │           │   ├── GustoService.java
-│   │   │           │   ├── UserService.java
-│   │   │           │   ├── PromoterService.java
-│   │   │           │   ├── EmailService.java
-│   │   │           │   └── StorageService.java
-│   │   │           │
-│   │   │           ├── repository/
-│   │   │           │   ├── UserRepository.java
-│   │   │           │   ├── EventRepository.java
-│   │   │           │   ├── GustoRepository.java
-│   │   │           │   ├── PromoterRepository.java
-│   │   │           │   ├── SavedEventRepository.java
-│   │   │           │   └── CityRepository.java
-│   │   │           │
-│   │   │           ├── model/
-│   │   │           │   ├── entity/
-│   │   │           │   │   ├── User.java
-│   │   │           │   │   ├── Promoter.java
-│   │   │           │   │   ├── Event.java
-│   │   │           │   │   ├── Gusto.java
-│   │   │           │   │   ├── SavedEvent.java
-│   │   │           │   │   └── City.java
-│   │   │           │   │
-│   │   │           │   ├── dto/
-│   │   │           │   │   ├── request/
-│   │   │           │   │   │   ├── LoginRequest.java
-│   │   │           │   │   │   ├── RegisterRequest.java
-│   │   │           │   │   │   ├── CreateEventRequest.java
-│   │   │           │   │   │   ├── UpdateEventRequest.java
-│   │   │           │   │   │   └── EventFilterRequest.java
-│   │   │           │   │   └── response/
-│   │   │           │   │       ├── AuthResponse.java
-│   │   │           │   │       ├── EventResponse.java
-│   │   │           │   │       ├── EventDetailResponse.java
-│   │   │           │   │       ├── GustoResponse.java
-│   │   │           │   │       ├── PageResponse.java
-│   │   │           │   │       └── ApiResponse.java
-│   │   │           │   │
-│   │   │           │   └── enums/
-│   │   │           │       ├── UserRole.java
-│   │   │           │       ├── EventStatus.java
-│   │   │           │       ├── EventType.java
-│   │   │           │       └── PromoterStatus.java
-│   │   │           │
-│   │   │           ├── security/
-│   │   │           │   ├── JwtTokenProvider.java
-│   │   │           │   ├── JwtAuthenticationFilter.java
-│   │   │           │   ├── JwtAuthenticationEntryPoint.java
-│   │   │           │   ├── UserDetailsServiceImpl.java
-│   │   │           │   └── CustomUserDetails.java
-│   │   │           │
-│   │   │           ├── exception/
-│   │   │           │   ├── GlobalExceptionHandler.java
-│   │   │           │   ├── ResourceNotFoundException.java
-│   │   │           │   ├── UnauthorizedException.java
-│   │   │           │   ├── BadRequestException.java
-│   │   │           │   └── BusinessException.java
-│   │   │           │
-│   │   │           └── util/
-│   │   │               ├── DateUtil.java
-│   │   │               ├── GeoUtil.java
-│   │   │               ├── SlugUtil.java
-│   │   │               └── ValidationUtil.java
-│   │   │
-│   │   └── resources/
-│   │       ├── application.yml
-│   │       ├── application-dev.yml
-│   │       ├── application-prod.yml
-│   │       ├── db/
-│   │       │   └── migration/
-│   │       │       ├── V1__create_initial_schema.sql
-│   │       │       └── V2__seed_gustos_and_cities.sql
-│   │       └── templates/
-│   │           └── email/
-│   │               ├── event-approved.html
-│   │               ├── event-rejected.html
-│   │               └── welcome.html
-│   │
-│   └── test/
-│       └── java/
-│           └── com/
-│               └── amigusto/
-│                   ├── controller/
-│                   │   ├── AuthControllerTest.java
-│                   │   ├── EventControllerTest.java
-│                   │   └── AdminControllerTest.java
-│                   ├── service/
-│                   │   ├── EventServiceTest.java
-│                   │   ├── AuthServiceTest.java
-│                   │   └── UserServiceTest.java
-│                   └── repository/
-│                       └── EventRepositoryTest.java
+amigusto-microservices/
 │
-├── docker-compose.yml
-├── Dockerfile
-├── pom.xml (o build.gradle.kts)
+├── api-gateway/                    # API Gateway (Puerto 8080)
+│   ├── src/
+│   │   ├── main/
+│   │   │   ├── java/com/amigusto/gateway/
+│   │   │   │   ├── ApiGatewayApplication.java
+│   │   │   │   ├── filter/
+│   │   │   │   │   ├── AuthenticationFilter.java
+│   │   │   │   │   └── LoggingFilter.java
+│   │   │   │   ├── config/
+│   │   │   │   │   ├── GatewayConfig.java
+│   │   │   │   │   └── CorsConfig.java
+│   │   │   │   └── util/
+│   │   │   │       └── JwtUtil.java
+│   │   │   └── resources/
+│   │   │       ├── bootstrap.yml
+│   │   │       └── application.yml
+│   │   └── test/
+│   ├── pom.xml
+│   └── Dockerfile
+│
+├── eureka-server/                  # Service Discovery (Puerto 8761)
+│   ├── src/
+│   │   ├── main/
+│   │   │   ├── java/com/amigusto/eureka/
+│   │   │   │   └── EurekaServerApplication.java
+│   │   │   └── resources/
+│   │   │       └── application.yml
+│   │   └── test/
+│   ├── pom.xml
+│   └── Dockerfile
+│
+├── config-server/                  # Config Server (Puerto 8888)
+│   ├── src/
+│   │   ├── main/
+│   │   │   ├── java/com/amigusto/config/
+│   │   │   │   └── ConfigServerApplication.java
+│   │   │   └── resources/
+│   │   │       └── application.yml
+│   │   └── test/
+│   ├── pom.xml
+│   └── Dockerfile
+│
+├── auth-service/                   # Auth Service (Puerto 8081)
+│   ├── src/
+│   │   ├── main/
+│   │   │   ├── java/com/amigusto/auth/
+│   │   │   │   ├── AuthServiceApplication.java
+│   │   │   │   │
+│   │   │   │   ├── controller/
+│   │   │   │   │   └── AuthController.java
+│   │   │   │   │
+│   │   │   │   ├── service/
+│   │   │   │   │   ├── AuthService.java
+│   │   │   │   │   ├── JwtTokenService.java
+│   │   │   │   │   └── UserEventPublisher.java
+│   │   │   │   │
+│   │   │   │   ├── repository/
+│   │   │   │   │   └── UserRepository.java
+│   │   │   │   │
+│   │   │   │   ├── model/
+│   │   │   │   │   ├── entity/
+│   │   │   │   │   │   └── User.java
+│   │   │   │   │   ├── dto/
+│   │   │   │   │   │   ├── request/
+│   │   │   │   │   │   │   ├── LoginRequest.java
+│   │   │   │   │   │   │   ├── RegisterConsumerRequest.java
+│   │   │   │   │   │   │   └── RegisterPromoterRequest.java
+│   │   │   │   │   │   └── response/
+│   │   │   │   │   │       └── AuthResponse.java
+│   │   │   │   │   ├── event/
+│   │   │   │   │   │   └── UserCreatedEvent.java
+│   │   │   │   │   └── enums/
+│   │   │   │   │       └── UserRole.java
+│   │   │   │   │
+│   │   │   │   ├── security/
+│   │   │   │   │   ├── JwtTokenProvider.java
+│   │   │   │   │   ├── UserDetailsServiceImpl.java
+│   │   │   │   │   └── SecurityConfig.java
+│   │   │   │   │
+│   │   │   │   ├── config/
+│   │   │   │   │   ├── RabbitMQConfig.java
+│   │   │   │   │   └── RedisConfig.java
+│   │   │   │   │
+│   │   │   │   └── exception/
+│   │   │   │       ├── GlobalExceptionHandler.java
+│   │   │   │       └── DuplicateEmailException.java
+│   │   │   │
+│   │   │   └── resources/
+│   │   │       ├── bootstrap.yml
+│   │   │       ├── application.yml
+│   │   │       └── db/migration/
+│   │   │           └── V1__create_users_table.sql
+│   │   │
+│   │   └── test/
+│   │       └── java/com/amigusto/auth/
+│   │           ├── controller/
+│   │           └── service/
+│   │
+│   ├── pom.xml
+│   └── Dockerfile
+│
+├── event-service/                  # Event Service (Puerto 8082)
+│   ├── src/
+│   │   ├── main/
+│   │   │   ├── java/com/amigusto/event/
+│   │   │   │   ├── EventServiceApplication.java
+│   │   │   │   │
+│   │   │   │   ├── controller/
+│   │   │   │   │   ├── EventController.java
+│   │   │   │   │   └── GustoController.java
+│   │   │   │   │
+│   │   │   │   ├── service/
+│   │   │   │   │   ├── EventService.java
+│   │   │   │   │   ├── GustoService.java
+│   │   │   │   │   └── EventPublisher.java
+│   │   │   │   │
+│   │   │   │   ├── repository/
+│   │   │   │   │   ├── EventRepository.java
+│   │   │   │   │   └── GustoRepository.java
+│   │   │   │   │
+│   │   │   │   ├── model/
+│   │   │   │   │   ├── entity/
+│   │   │   │   │   │   ├── Event.java
+│   │   │   │   │   │   └── Gusto.java
+│   │   │   │   │   ├── dto/
+│   │   │   │   │   │   ├── request/
+│   │   │   │   │   │   │   ├── CreateEventRequest.java
+│   │   │   │   │   │   │   └── EventFilterRequest.java
+│   │   │   │   │   │   └── response/
+│   │   │   │   │   │       ├── EventResponse.java
+│   │   │   │   │   │       └── GustoResponse.java
+│   │   │   │   │   ├── event/
+│   │   │   │   │   │   ├── EventApprovedEvent.java
+│   │   │   │   │   │   ├── EventRejectedEvent.java
+│   │   │   │   │   │   └── EventCreatedEvent.java
+│   │   │   │   │   └── enums/
+│   │   │   │   │       └── EventStatus.java
+│   │   │   │   │
+│   │   │   │   ├── client/
+│   │   │   │   │   ├── PromoterServiceClient.java     # Feign Client
+│   │   │   │   │   ├── PromoterServiceFallback.java
+│   │   │   │   │   ├── StorageServiceClient.java      # Feign Client
+│   │   │   │   │   └── StorageServiceFallback.java
+│   │   │   │   │
+│   │   │   │   ├── listener/
+│   │   │   │   │   └── EventSavedListener.java        # RabbitMQ Listener
+│   │   │   │   │
+│   │   │   │   ├── config/
+│   │   │   │   │   ├── FeignConfig.java
+│   │   │   │   │   ├── RabbitMQConfig.java
+│   │   │   │   │   ├── RedisConfig.java
+│   │   │   │   │   └── ResilienceConfig.java
+│   │   │   │   │
+│   │   │   │   └── exception/
+│   │   │   │       └── GlobalExceptionHandler.java
+│   │   │   │
+│   │   │   └── resources/
+│   │   │       ├── bootstrap.yml
+│   │   │       ├── application.yml
+│   │   │       └── db/migration/
+│   │   │           ├── V1__create_events_table.sql
+│   │   │           └── V2__create_gustos_table.sql
+│   │   │
+│   │   └── test/
+│   │       └── java/com/amigusto/event/
+│   │           ├── controller/
+│   │           ├── service/
+│   │           └── repository/
+│   │
+│   ├── pom.xml
+│   └── Dockerfile
+│
+├── user-service/                   # User Service (Puerto 8083)
+│   ├── src/
+│   │   ├── main/
+│   │   │   ├── java/com/amigusto/user/
+│   │   │   │   ├── UserServiceApplication.java
+│   │   │   │   │
+│   │   │   │   ├── controller/
+│   │   │   │   │   ├── UserController.java
+│   │   │   │   │   └── SavedEventController.java
+│   │   │   │   │
+│   │   │   │   ├── service/
+│   │   │   │   │   ├── UserService.java
+│   │   │   │   │   ├── SavedEventService.java
+│   │   │   │   │   └── EventSavedPublisher.java
+│   │   │   │   │
+│   │   │   │   ├── repository/
+│   │   │   │   │   ├── ConsumerRepository.java
+│   │   │   │   │   ├── UserGustoRepository.java
+│   │   │   │   │   └── SavedEventRepository.java
+│   │   │   │   │
+│   │   │   │   ├── model/
+│   │   │   │   │   ├── entity/
+│   │   │   │   │   │   ├── Consumer.java
+│   │   │   │   │   │   ├── UserGusto.java
+│   │   │   │   │   │   └── SavedEvent.java
+│   │   │   │   │   ├── dto/
+│   │   │   │   │   ├── event/
+│   │   │   │   │   │   ├── UserCreatedEvent.java
+│   │   │   │   │   │   └── EventSavedEvent.java
+│   │   │   │   │   └── enums/
+│   │   │   │   │
+│   │   │   │   ├── client/
+│   │   │   │   │   ├── EventServiceClient.java        # Feign Client
+│   │   │   │   │   └── EventServiceFallback.java
+│   │   │   │   │
+│   │   │   │   ├── listener/
+│   │   │   │   │   └── UserCreatedListener.java       # RabbitMQ Listener
+│   │   │   │   │
+│   │   │   │   ├── config/
+│   │   │   │   │   ├── FeignConfig.java
+│   │   │   │   │   ├── RabbitMQConfig.java
+│   │   │   │   │   └── ResilienceConfig.java
+│   │   │   │   │
+│   │   │   │   └── exception/
+│   │   │   │
+│   │   │   └── resources/
+│   │   │       ├── bootstrap.yml
+│   │   │       ├── application.yml
+│   │   │       └── db/migration/
+│   │   │           ├── V1__create_consumers_table.sql
+│   │   │           └── V2__create_saved_events_table.sql
+│   │   │
+│   │   └── test/
+│   │
+│   ├── pom.xml
+│   └── Dockerfile
+│
+├── promoter-service/               # Promoter Service (Puerto 8084)
+│   ├── src/
+│   │   ├── main/
+│   │   │   ├── java/com/amigusto/promoter/
+│   │   │   │   ├── PromoterServiceApplication.java
+│   │   │   │   │
+│   │   │   │   ├── controller/
+│   │   │   │   │   └── PromoterController.java
+│   │   │   │   │
+│   │   │   │   ├── service/
+│   │   │   │   │   └── PromoterService.java
+│   │   │   │   │
+│   │   │   │   ├── repository/
+│   │   │   │   │   └── PromoterRepository.java
+│   │   │   │   │
+│   │   │   │   ├── model/
+│   │   │   │   │   ├── entity/
+│   │   │   │   │   │   └── Promoter.java
+│   │   │   │   │   ├── dto/
+│   │   │   │   │   ├── event/
+│   │   │   │   │   │   ├── UserCreatedEvent.java
+│   │   │   │   │   │   └── EventCreatedEvent.java
+│   │   │   │   │   └── enums/
+│   │   │   │   │       └── PromoterStatus.java
+│   │   │   │   │
+│   │   │   │   ├── client/
+│   │   │   │   │   ├── EventServiceClient.java        # Feign Client
+│   │   │   │   │   └── EventServiceFallback.java
+│   │   │   │   │
+│   │   │   │   ├── listener/
+│   │   │   │   │   ├── UserCreatedListener.java
+│   │   │   │   │   └── EventCreatedListener.java
+│   │   │   │   │
+│   │   │   │   ├── config/
+│   │   │   │   │   ├── FeignConfig.java
+│   │   │   │   │   └── RabbitMQConfig.java
+│   │   │   │   │
+│   │   │   │   └── exception/
+│   │   │   │
+│   │   │   └── resources/
+│   │   │       ├── bootstrap.yml
+│   │   │       ├── application.yml
+│   │   │       └── db/migration/
+│   │   │           └── V1__create_promoters_table.sql
+│   │   │
+│   │   └── test/
+│   │
+│   ├── pom.xml
+│   └── Dockerfile
+│
+├── notification-service/           # Notification Service (Puerto 8085)
+│   ├── src/
+│   │   ├── main/
+│   │   │   ├── java/com/amigusto/notification/
+│   │   │   │   ├── NotificationServiceApplication.java
+│   │   │   │   │
+│   │   │   │   ├── service/
+│   │   │   │   │   ├── EmailService.java
+│   │   │   │   │   ├── PushNotificationService.java
+│   │   │   │   │   └── SmsService.java
+│   │   │   │   │
+│   │   │   │   ├── repository/
+│   │   │   │   │   └── NotificationRepository.java   # MongoDB
+│   │   │   │   │
+│   │   │   │   ├── model/
+│   │   │   │   │   ├── document/
+│   │   │   │   │   │   └── Notification.java         # MongoDB Document
+│   │   │   │   │   ├── dto/
+│   │   │   │   │   └── event/
+│   │   │   │   │       ├── UserCreatedEvent.java
+│   │   │   │   │       ├── EventApprovedEvent.java
+│   │   │   │   │       └── EventRejectedEvent.java
+│   │   │   │   │
+│   │   │   │   ├── client/
+│   │   │   │   │   ├── PromoterServiceClient.java     # Feign Client
+│   │   │   │   │   └── PromoterServiceFallback.java
+│   │   │   │   │
+│   │   │   │   ├── listener/
+│   │   │   │   │   ├── UserEventListener.java
+│   │   │   │   │   └── EventEventListener.java
+│   │   │   │   │
+│   │   │   │   ├── config/
+│   │   │   │   │   ├── MongoConfig.java
+│   │   │   │   │   ├── RabbitMQConfig.java
+│   │   │   │   │   ├── MailConfig.java
+│   │   │   │   │   └── FirebaseConfig.java
+│   │   │   │   │
+│   │   │   │   └── exception/
+│   │   │   │
+│   │   │   └── resources/
+│   │   │       ├── bootstrap.yml
+│   │   │       ├── application.yml
+│   │   │       └── templates/
+│   │   │           └── email/
+│   │   │               ├── welcome.html
+│   │   │               ├── event-approved.html
+│   │   │               └── event-rejected.html
+│   │   │
+│   │   └── test/
+│   │
+│   ├── pom.xml
+│   └── Dockerfile
+│
+├── storage-service/                # Storage Service (Puerto 8086)
+│   ├── src/
+│   │   ├── main/
+│   │   │   ├── java/com/amigusto/storage/
+│   │   │   │   ├── StorageServiceApplication.java
+│   │   │   │   │
+│   │   │   │   ├── controller/
+│   │   │   │   │   └── StorageController.java
+│   │   │   │   │
+│   │   │   │   ├── service/
+│   │   │   │   │   ├── S3StorageService.java
+│   │   │   │   │   └── CloudinaryStorageService.java
+│   │   │   │   │
+│   │   │   │   ├── model/
+│   │   │   │   │   └── dto/
+│   │   │   │   │       ├── UploadResponse.java
+│   │   │   │   │       └── DeleteResponse.java
+│   │   │   │   │
+│   │   │   │   ├── config/
+│   │   │   │   │   ├── S3Config.java
+│   │   │   │   │   └── CloudinaryConfig.java
+│   │   │   │   │
+│   │   │   │   └── exception/
+│   │   │   │       ├── GlobalExceptionHandler.java
+│   │   │   │   │   └── InvalidFileException.java
+│   │   │   │
+│   │   │   └── resources/
+│   │   │       ├── bootstrap.yml
+│   │   │       └── application.yml
+│   │   │
+│   │   └── test/
+│   │
+│   ├── pom.xml
+│   └── Dockerfile
+│
+├── docker-compose.yml              # Orquestación local de todos los servicios
+├── docker-compose.dev.yml          # Override para desarrollo
+├── docker-compose.prod.yml         # Override para producción
+│
+├── k8s/                            # Kubernetes manifests
+│   ├── namespace.yml
+│   ├── configmap.yml
+│   ├── secrets.yml
+│   │
+│   ├── infrastructure/
+│   │   ├── eureka-deployment.yml
+│   │   ├── eureka-service.yml
+│   │   ├── config-server-deployment.yml
+│   │   ├── rabbitmq-deployment.yml
+│   │   ├── rabbitmq-service.yml
+│   │   ├── redis-deployment.yml
+│   │   ├── redis-service.yml
+│   │   ├── postgres-deployment.yml
+│   │   ├── postgres-service.yml
+│   │   ├── mongodb-deployment.yml
+│   │   └── mongodb-service.yml
+│   │
+│   ├── microservices/
+│   │   ├── api-gateway-deployment.yml
+│   │   ├── api-gateway-service.yml
+│   │   ├── auth-service-deployment.yml
+│   │   ├── auth-service-service.yml
+│   │   ├── event-service-deployment.yml
+│   │   ├── event-service-service.yml
+│   │   ├── user-service-deployment.yml
+│   │   ├── user-service-service.yml
+│   │   ├── promoter-service-deployment.yml
+│   │   ├── promoter-service-service.yml
+│   │   ├── notification-service-deployment.yml
+│   │   ├── notification-service-service.yml
+│   │   ├── storage-service-deployment.yml
+│   │   └── storage-service-service.yml
+│   │
+│   └── ingress/
+│       └── ingress.yml
+│
+├── .github/workflows/              # CI/CD Pipelines
+│   ├── api-gateway-ci.yml
+│   ├── auth-service-ci.yml
+│   ├── event-service-ci.yml
+│   ├── user-service-ci.yml
+│   ├── promoter-service-ci.yml
+│   ├── notification-service-ci.yml
+│   └── storage-service-ci.yml
+│
+├── scripts/                        # Scripts útiles
+│   ├── start-local.sh             # Levantar todo en local
+│   ├── stop-local.sh
+│   ├── build-all.sh               # Build de todos los servicios
+│   └── deploy-k8s.sh              # Deploy a Kubernetes
+│
+├── pom.xml                         # Parent POM
 ├── .gitignore
 ├── README.md
 └── .env.example
 ```
 
-### 2.2 Convenciones de Código Java
+### 2.2 Convenciones de Código Java (Microservicios)
 
-**Naming:**
-- Clases: PascalCase (`EventService`, `UserController`)
+**Naming Conventions:**
+- Clases: PascalCase (`EventService`, `EventController`)
 - Métodos: camelCase (`getEventById`, `saveEvent`)
 - Constantes: UPPER_SNAKE_CASE (`MAX_FILE_SIZE`, `JWT_SECRET_KEY`)
-- Packages: lowercase (`com.amigusto.service`)
+- Packages: lowercase (`com.amigusto.event.service`)
 
-**Anotaciones Spring:**
+**Anotaciones Spring Boot:**
 ```java
 @RestController
 @RequestMapping("/api/v1/events")
@@ -180,11 +485,227 @@ public class EventController {
 }
 ```
 
+**Anotaciones Spring Cloud:**
+```java
+// Feign Client
+@FeignClient(
+    name = "PROMOTER-SERVICE",
+    fallback = PromoterServiceFallback.class
+)
+public interface PromoterServiceClient {
+    @GetMapping("/api/v1/promoters/{id}")
+    PromoterResponse getPromoter(@PathVariable UUID id);
+}
+
+// RabbitMQ Listener
+@Component
+@RequiredArgsConstructor
+@Slf4j
+public class UserCreatedListener {
+
+    @RabbitListener(queues = "user-service.user.created")
+    public void handleUserCreated(UserCreatedEvent event) {
+        log.info("Usuario creado: {}", event.getUserId());
+        // Process event...
+    }
+}
+
+// Circuit Breaker
+@Service
+@RequiredArgsConstructor
+public class EventService {
+
+    @CircuitBreaker(name = "promoterService", fallbackMethod = "fallback")
+    @Retry(name = "promoterService")
+    @Timeout(value = 3, unit = ChronoUnit.SECONDS)
+    public PromoterResponse getPromoter(UUID id) {
+        return promoterClient.getPromoter(id);
+    }
+
+    private PromoterResponse fallback(UUID id, Exception e) {
+        log.error("Fallback activado", e);
+        throw new ServiceUnavailableException("Promoter Service no disponible");
+    }
+}
+```
+
+### 2.3 Configuración Bootstrap vs Application
+
+**bootstrap.yml** (cargado ANTES, para Config Server):
+```yaml
+spring:
+  application:
+    name: event-service
+  cloud:
+    config:
+      uri: http://localhost:8888
+      fail-fast: true
+  profiles:
+    active: dev
+```
+
+**application.yml** (configuración local, overrideada por Config Server):
+```yaml
+server:
+  port: 8082
+
+eureka:
+  client:
+    serviceUrl:
+      defaultZone: http://localhost:8761/eureka/
+  instance:
+    preferIpAddress: true
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,metrics,prometheus
+  endpoint:
+    health:
+      show-details: always
+```
+
 ---
 
-## 3. ESTRUCTURA DE iOS (SWIFT + SWIFTUI)
+## 3. CONFIGURACIÓN CENTRALIZADA (CONFIG REPO)
 
-### 3.1 Estructura Completa
+### 3.1 Estructura del Repositorio de Configuración
+
+```
+config-repo/
+├── application.yml                 # Configuración común para TODOS los servicios
+├── application-dev.yml             # Override para entorno DEV
+├── application-staging.yml         # Override para entorno STAGING
+├── application-prod.yml            # Override para entorno PROD
+│
+├── api-gateway.yml                 # Config específico de API Gateway
+├── api-gateway-dev.yml
+├── api-gateway-prod.yml
+│
+├── auth-service.yml                # Config específico de Auth Service
+├── auth-service-dev.yml
+├── auth-service-prod.yml
+│
+├── event-service.yml
+├── event-service-dev.yml
+├── event-service-prod.yml
+│
+├── user-service.yml
+├── user-service-dev.yml
+├── user-service-prod.yml
+│
+├── promoter-service.yml
+├── promoter-service-dev.yml
+├── promoter-service-prod.yml
+│
+├── notification-service.yml
+├── notification-service-dev.yml
+├── notification-service-prod.yml
+│
+├── storage-service.yml
+├── storage-service-dev.yml
+├── storage-service-prod.yml
+│
+└── README.md
+```
+
+### 3.2 Ejemplo de Configuración Común
+
+**application.yml:**
+```yaml
+# Configuración compartida por TODOS los microservicios
+
+spring:
+  jpa:
+    hibernate:
+      ddl-auto: validate  # Usar Flyway para migraciones
+    show-sql: false
+    properties:
+      hibernate:
+        format_sql: true
+
+  data:
+    redis:
+      host: ${REDIS_HOST:localhost}
+      port: 6379
+      timeout: 2000ms
+
+  rabbitmq:
+    host: ${RABBITMQ_HOST:localhost}
+    port: 5672
+    username: ${RABBITMQ_USER:rabbitmq}
+    password: ${RABBITMQ_PASS:rabbitmq}
+
+  sleuth:
+    sampler:
+      probability: 0.1  # 10% de requests trackeados
+
+  zipkin:
+    base-url: http://localhost:9411
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,metrics,prometheus
+  metrics:
+    export:
+      prometheus:
+        enabled: true
+
+logging:
+  level:
+    root: INFO
+    com.amigusto: DEBUG
+  pattern:
+    console: "%d{yyyy-MM-dd HH:mm:ss} [%X{traceId}/%X{spanId}] %-5level %logger{36} - %msg%n"
+```
+
+**event-service-prod.yml:**
+```yaml
+spring:
+  datasource:
+    url: jdbc:postgresql://${DB_HOST:postgres-prod}:5432/event_service
+    username: ${DB_USER}
+    password: ${DB_PASSWORD}
+    hikari:
+      maximum-pool-size: 20
+      minimum-idle: 5
+
+  cache:
+    type: redis
+    redis:
+      time-to-live: 300000  # 5 minutos
+
+resilience4j:
+  circuitbreaker:
+    instances:
+      promoterService:
+        registerHealthIndicator: true
+        slidingWindowSize: 10
+        minimumNumberOfCalls: 5
+        permittedNumberOfCallsInHalfOpenState: 3
+        waitDurationInOpenState: 10s
+        failureRateThreshold: 50
+
+  retry:
+    instances:
+      promoterService:
+        maxAttempts: 3
+        waitDuration: 500ms
+
+logging:
+  level:
+    root: WARN
+    com.amigusto: INFO
+```
+
+---
+
+## 4. ESTRUCTURA DE iOS (SWIFT + SWIFTUI)
+
+### 4.1 Estructura Completa (Sin cambios respecto a monolito)
 
 ```
 AmigustoiOS/
@@ -197,495 +718,350 @@ AmigustoiOS/
 │   │   ├── Models/
 │   │   │   ├── Event.swift
 │   │   │   ├── Gusto.swift
-│   │   │   ├── User.swift
-│   │   │   ├── Promoter.swift
-│   │   │   └── City.swift
+│   │   │   └── User.swift
 │   │   │
 │   │   ├── Networking/
-│   │   │   ├── APIService.swift
+│   │   │   ├── APIService.swift            # Apunta a API Gateway :8080
 │   │   │   ├── Endpoints.swift
-│   │   │   ├── NetworkError.swift
-│   │   │   └── RequestBuilder.swift
+│   │   │   └── NetworkError.swift
 │   │   │
 │   │   └── Persistence/
 │   │       ├── CoreDataStack.swift
-│   │       ├── KeychainManager.swift
-│   │       └── UserDefaultsManager.swift
+│   │       └── KeychainManager.swift
 │   │
 │   ├── Features/
 │   │   ├── Auth/
-│   │   │   ├── Views/
-│   │   │   │   ├── LoginView.swift
-│   │   │   │   └── RegisterView.swift
-│   │   │   └── ViewModels/
-│   │   │       └── AuthViewModel.swift
-│   │   │
 │   │   ├── Onboarding/
-│   │   │   ├── Views/
-│   │   │   │   ├── WelcomeView.swift
-│   │   │   │   ├── GustoSelectionView.swift
-│   │   │   │   └── LocationPermissionView.swift
-│   │   │   └── ViewModels/
-│   │   │       └── OnboardingViewModel.swift
-│   │   │
 │   │   ├── Discover/
-│   │   │   ├── Views/
-│   │   │   │   ├── DiscoverView.swift
-│   │   │   │   ├── EventCard.swift
-│   │   │   │   ├── EventDetailView.swift
-│   │   │   │   └── FilterSheet.swift
-│   │   │   └── ViewModels/
-│   │   │       ├── DiscoverViewModel.swift
-│   │   │       └── EventDetailViewModel.swift
-│   │   │
 │   │   └── MyPlans/
-│   │       ├── Views/
-│   │       │   ├── MyPlansView.swift
-│   │       │   └── SavedEventCard.swift
-│   │       └── ViewModels/
-│   │           └── MyPlansViewModel.swift
 │   │
-│   ├── Shared/
-│   │   ├── Components/
-│   │   │   ├── GustoChip.swift
-│   │   │   ├── LoadingView.swift
-│   │   │   ├── EmptyStateView.swift
-│   │   │   └── ErrorView.swift
-│   │   │
-│   │   ├── Extensions/
-│   │   │   ├── View+Extensions.swift
-│   │   │   ├── String+Extensions.swift
-│   │   │   ├── Date+Extensions.swift
-│   │   │   └── Color+Extensions.swift
-│   │   │
-│   │   └── Modifiers/
-│   │       ├── CardModifier.swift
-│   │       └── ShimmerModifier.swift
-│   │
-│   ├── Services/
-│   │   ├── EventService.swift
-│   │   ├── AuthService.swift
-│   │   ├── UserService.swift
-│   │   ├── LocationService.swift
-│   │   └── AnalyticsService.swift
-│   │
-│   ├── Utilities/
-│   │   ├── Constants.swift
-│   │   ├── Configuration.swift
-│   │   ├── Formatters.swift
-│   │   └── Logger.swift
-│   │
-│   ├── Resources/
-│   │   ├── Assets.xcassets/
-│   │   ├── Colors.xcassets/
-│   │   ├── Localizable.strings
-│   │   └── Info.plist
-│   │
-│   └── Navigation/
-│       ├── MainTabView.swift
-│       ├── NavigationCoordinator.swift
-│       └── DeepLinkHandler.swift
+│   └── Resources/
 │
-├── AmigustoiOSTests/
-│   ├── ViewModelTests/
-│   │   ├── DiscoverViewModelTests.swift
-│   │   └── AuthViewModelTests.swift
-│   ├── ServiceTests/
-│   │   └── EventServiceTests.swift
-│   └── MockData/
-│       └── MockEventData.swift
-│
-├── AmigustoiOSUITests/
-│   └── DiscoverFlowTests.swift
-│
-├── AmigustoiOS.xcodeproj
-└── Podfile (o Package.swift si usas SPM)
+└── AmigustoiOS.xcodeproj
 ```
 
-### 3.2 Convenciones de Código Swift
-
-**Naming:**
-- Tipos: PascalCase (`EventViewModel`, `DiscoverView`)
-- Funciones/Variables: camelCase (`fetchEvents`, `selectedGustos`)
-- Protocolos: PascalCase con sufijo "able" o "ing" (`Codable`, `ObservableObject`)
-
-**SwiftUI Views:**
-```swift
-struct DiscoverView: View {
-    @StateObject private var viewModel = DiscoverViewModel()
-
-    var body: some View {
-        // UI here
-    }
-}
-```
+**IMPORTANTE:** Las apps móviles NO necesitan saber que el backend son microservicios. Solo se comunican con **API Gateway** en puerto 8080.
 
 ---
 
-## 4. ESTRUCTURA DE ANDROID (KOTLIN + JETPACK COMPOSE)
+## 5. ESTRUCTURA DE ANDROID (KOTLIN + JETPACK COMPOSE)
 
-### 4.1 Estructura Completa
+### 5.1 Estructura Completa (Sin cambios respecto a monolito)
 
 ```
 AmigustoAndroid/
 ├── app/
 │   ├── src/
 │   │   ├── main/
-│   │   │   ├── java/
-│   │   │   │   └── com/
-│   │   │   │       └── amigusto/
-│   │   │   │           ├── AmigustoApplication.kt
-│   │   │   │           │
-│   │   │   │           ├── di/
-│   │   │   │           │   ├── AppModule.kt
-│   │   │   │           │   ├── NetworkModule.kt
-│   │   │   │           │   ├── DatabaseModule.kt
-│   │   │   │           │   └── RepositoryModule.kt
-│   │   │   │           │
-│   │   │   │           ├── data/
-│   │   │   │           │   ├── remote/
-│   │   │   │           │   │   ├── api/
-│   │   │   │           │   │   │   ├── ApiService.kt
-│   │   │   │           │   │   │   ├── AuthApi.kt
-│   │   │   │           │   │   │   └── EventApi.kt
-│   │   │   │           │   │   ├── dto/
-│   │   │   │           │   │   │   ├── EventDto.kt
-│   │   │   │           │   │   │   ├── GustoDto.kt
-│   │   │   │           │   │   │   └── AuthDto.kt
-│   │   │   │           │   │   └── interceptor/
-│   │   │   │           │   │       ├── AuthInterceptor.kt
-│   │   │   │           │   │       └── ErrorInterceptor.kt
-│   │   │   │           │   │
-│   │   │   │           │   ├── local/
-│   │   │   │           │   │   ├── database/
-│   │   │   │           │   │   │   ├── AppDatabase.kt
-│   │   │   │           │   │   │   └── Converters.kt
-│   │   │   │           │   │   ├── dao/
-│   │   │   │           │   │   │   ├── EventDao.kt
-│   │   │   │           │   │   │   └── UserDao.kt
-│   │   │   │           │   │   ├── entity/
-│   │   │   │           │   │   │   ├── EventEntity.kt
-│   │   │   │           │   │   │   └── UserEntity.kt
-│   │   │   │           │   │   └── preferences/
-│   │   │   │           │   │       └── PreferencesManager.kt
-│   │   │   │           │   │
-│   │   │   │           │   ├── repository/
-│   │   │   │           │   │   ├── EventRepository.kt
-│   │   │   │           │   │   ├── EventRepositoryImpl.kt
-│   │   │   │           │   │   ├── AuthRepository.kt
-│   │   │   │           │   │   └── AuthRepositoryImpl.kt
-│   │   │   │           │   │
-│   │   │   │           │   └── mapper/
-│   │   │   │           │       ├── EventMapper.kt
-│   │   │   │           │       └── GustoMapper.kt
-│   │   │   │           │
-│   │   │   │           ├── domain/
-│   │   │   │           │   ├── model/
-│   │   │   │           │   │   ├── Event.kt
-│   │   │   │           │   │   ├── Gusto.kt
-│   │   │   │           │   │   ├── User.kt
-│   │   │   │           │   │   └── EventStatus.kt
-│   │   │   │           │   │
-│   │   │   │           │   ├── usecase/
-│   │   │   │           │   │   ├── GetEventsUseCase.kt
-│   │   │   │           │   │   ├── SaveEventUseCase.kt
-│   │   │   │           │   │   ├── GetSavedEventsUseCase.kt
-│   │   │   │           │   │   └── LoginUseCase.kt
-│   │   │   │           │   │
-│   │   │   │           │   └── repository/
-│   │   │   │           │       ├── IEventRepository.kt
-│   │   │   │           │       └── IAuthRepository.kt
-│   │   │   │           │
-│   │   │   │           └── presentation/
-│   │   │   │               ├── MainActivity.kt
-│   │   │   │               ├── navigation/
-│   │   │   │               │   ├── NavGraph.kt
-│   │   │   │               │   ├── Screen.kt
-│   │   │   │               │   └── NavigationExtensions.kt
-│   │   │   │               │
-│   │   │   │               ├── theme/
-│   │   │   │               │   ├── Color.kt
-│   │   │   │               │   ├── Type.kt
-│   │   │   │               │   ├── Theme.kt
-│   │   │   │               │   └── Shape.kt
-│   │   │   │               │
-│   │   │   │               ├── components/
-│   │   │   │               │   ├── EventCard.kt
-│   │   │   │               │   ├── GustoChip.kt
-│   │   │   │               │   ├── LoadingIndicator.kt
-│   │   │   │               │   └── ErrorMessage.kt
-│   │   │   │               │
-│   │   │   │               ├── onboarding/
-│   │   │   │               │   ├── OnboardingScreen.kt
-│   │   │   │               │   ├── OnboardingViewModel.kt
-│   │   │   │               │   └── GustoSelectionScreen.kt
-│   │   │   │               │
-│   │   │   │               ├── discover/
-│   │   │   │               │   ├── DiscoverScreen.kt
-│   │   │   │               │   ├── DiscoverViewModel.kt
-│   │   │   │               │   ├── EventDetailScreen.kt
-│   │   │   │               │   └── EventDetailViewModel.kt
-│   │   │   │               │
-│   │   │   │               ├── myplans/
-│   │   │   │               │   ├── MyPlansScreen.kt
-│   │   │   │               │   └── MyPlansViewModel.kt
-│   │   │   │               │
-│   │   │   │               └── util/
-│   │   │   │                   ├── Constants.kt
-│   │   │   │                   ├── Extensions.kt
-│   │   │   │                   └── DateFormatter.kt
-│   │   │   │
-│   │   │   ├── res/
-│   │   │   │   ├── values/
-│   │   │   │   │   ├── strings.xml
-│   │   │   │   │   ├── colors.xml
-│   │   │   │   │   └── themes.xml
-│   │   │   │   ├── drawable/
-│   │   │   │   └── mipmap/
-│   │   │   │
-│   │   │   └── AndroidManifest.xml
-│   │   │
-│   │   ├── test/
-│   │   │   └── java/
-│   │   │       └── com/amigusto/
-│   │   │           ├── viewmodel/
-│   │   │           │   └── DiscoverViewModelTest.kt
-│   │   │           ├── repository/
-│   │   │           │   └── EventRepositoryTest.kt
-│   │   │           └── usecase/
-│   │   │               └── GetEventsUseCaseTest.kt
-│   │   │
-│   │   └── androidTest/
-│   │       └── java/
-│   │           └── com/amigusto/
-│   │               └── ui/
-│   │                   └── DiscoverScreenTest.kt
-│   │
-│   ├── build.gradle.kts
-│   └── proguard-rules.pro
-│
-├── gradle/
-│   └── libs.versions.toml
-├── build.gradle.kts
-├── settings.gradle.kts
-└── gradle.properties
+│   │   │   ├── java/com/amigusto/
+│   │   │   │   ├── AmigustoApplication.kt
+│   │   │   │   ├── data/
+│   │   │   │   │   ├── remote/
+│   │   │   │   │   │   └── api/
+│   │   │   │   │   │       └── ApiService.kt  # Base URL: API Gateway :8080
+│   │   │   │   │   └── local/
+│   │   │   │   ├── domain/
+│   │   │   │   └── presentation/
+│   │   │   └── res/
+│   │   └── test/
+│   └── build.gradle.kts
+└── build.gradle.kts
 ```
 
-### 4.2 Convenciones de Código Kotlin
-
-**Naming:**
-- Clases/Interfaces: PascalCase (`EventRepository`, `DiscoverViewModel`)
-- Funciones/Variables: camelCase (`fetchEvents`, `savedEvents`)
-- Constantes: UPPER_SNAKE_CASE (`API_BASE_URL`, `MAX_RETRY_COUNT`)
-- Packages: lowercase (`com.amigusto.data.repository`)
-
-**Composables:**
-```kotlin
-@Composable
-fun DiscoverScreen(
-    viewModel: DiscoverViewModel = hiltViewModel()
-) {
-    val uiState by viewModel.uiState.collectAsState()
-
-    // UI here
-}
-```
+**IMPORTANTE:** Android también solo conoce API Gateway. La arquitectura de microservicios es transparente para clientes.
 
 ---
 
-## 5. ESTRUCTURA DE WEB (ANGULAR)
+## 6. ESTRUCTURA DE WEB (ANGULAR)
 
-### 5.1 Estructura Completa - Portal B2B + Admin
+### 6.1 Estructura Completa (Sin cambios respecto a monolito)
 
 ```
 amigusto-web/
 ├── projects/
-│   ├── portal/                    # App principal (Portal B2B)
+│   ├── portal/                     # Portal B2B
 │   │   ├── src/
 │   │   │   ├── app/
 │   │   │   │   ├── core/
-│   │   │   │   │   ├── services/
-│   │   │   │   │   │   ├── api.service.ts
-│   │   │   │   │   │   ├── auth.service.ts
-│   │   │   │   │   │   ├── event.service.ts
-│   │   │   │   │   │   ├── gusto.service.ts
-│   │   │   │   │   │   └── storage.service.ts
-│   │   │   │   │   │
-│   │   │   │   │   ├── guards/
-│   │   │   │   │   │   ├── auth.guard.ts
-│   │   │   │   │   │   └── promoter.guard.ts
-│   │   │   │   │   │
-│   │   │   │   │   ├── interceptors/
-│   │   │   │   │   │   ├── auth.interceptor.ts
-│   │   │   │   │   │   ├── error.interceptor.ts
-│   │   │   │   │   │   └── loading.interceptor.ts
-│   │   │   │   │   │
-│   │   │   │   │   └── models/
-│   │   │   │   │       ├── event.model.ts
-│   │   │   │   │       ├── gusto.model.ts
-│   │   │   │   │       ├── user.model.ts
-│   │   │   │   │       └── api-response.model.ts
-│   │   │   │   │
+│   │   │   │   │   └── services/
+│   │   │   │   │       └── api.service.ts  # Base URL: API Gateway :8080
 │   │   │   │   ├── features/
-│   │   │   │   │   ├── auth/
-│   │   │   │   │   │   ├── login/
-│   │   │   │   │   │   │   ├── login.component.ts
-│   │   │   │   │   │   │   ├── login.component.html
-│   │   │   │   │   │   │   └── login.component.scss
-│   │   │   │   │   │   └── register/
-│   │   │   │   │   │       ├── register.component.ts
-│   │   │   │   │   │       ├── register.component.html
-│   │   │   │   │   │       └── register.component.scss
-│   │   │   │   │   │
-│   │   │   │   │   ├── dashboard/
-│   │   │   │   │   │   ├── dashboard.component.ts
-│   │   │   │   │   │   ├── dashboard.component.html
-│   │   │   │   │   │   ├── dashboard.component.scss
-│   │   │   │   │   │   └── components/
-│   │   │   │   │   │       └── events-list/
-│   │   │   │   │   │           ├── events-list.component.ts
-│   │   │   │   │   │           ├── events-list.component.html
-│   │   │   │   │   │           └── events-list.component.scss
-│   │   │   │   │   │
-│   │   │   │   │   ├── events/
-│   │   │   │   │   │   ├── create-event/
-│   │   │   │   │   │   │   ├── create-event.component.ts
-│   │   │   │   │   │   │   ├── create-event.component.html
-│   │   │   │   │   │   │   └── create-event.component.scss
-│   │   │   │   │   │   ├── edit-event/
-│   │   │   │   │   │   │   ├── edit-event.component.ts
-│   │   │   │   │   │   │   ├── edit-event.component.html
-│   │   │   │   │   │   │   └── edit-event.component.scss
-│   │   │   │   │   │   └── components/
-│   │   │   │   │   │       └── event-form/
-│   │   │   │   │   │           ├── event-form.component.ts
-│   │   │   │   │   │           ├── event-form.component.html
-│   │   │   │   │   │           └── event-form.component.scss
-│   │   │   │   │   │
-│   │   │   │   │   └── profile/
-│   │   │   │   │       ├── profile.component.ts
-│   │   │   │   │       ├── profile.component.html
-│   │   │   │   │       └── profile.component.scss
-│   │   │   │   │
-│   │   │   │   ├── shared/
-│   │   │   │   │   ├── components/
-│   │   │   │   │   │   ├── event-status-badge/
-│   │   │   │   │   │   │   ├── event-status-badge.component.ts
-│   │   │   │   │   │   │   ├── event-status-badge.component.html
-│   │   │   │   │   │   │   └── event-status-badge.component.scss
-│   │   │   │   │   │   ├── gusto-selector/
-│   │   │   │   │   │   │   ├── gusto-selector.component.ts
-│   │   │   │   │   │   │   ├── gusto-selector.component.html
-│   │   │   │   │   │   │   └── gusto-selector.component.scss
-│   │   │   │   │   │   ├── image-uploader/
-│   │   │   │   │   │   │   ├── image-uploader.component.ts
-│   │   │   │   │   │   │   ├── image-uploader.component.html
-│   │   │   │   │   │   │   └── image-uploader.component.scss
-│   │   │   │   │   │   └── location-autocomplete/
-│   │   │   │   │   │       ├── location-autocomplete.component.ts
-│   │   │   │   │   │       ├── location-autocomplete.component.html
-│   │   │   │   │   │       └── location-autocomplete.component.scss
-│   │   │   │   │   │
-│   │   │   │   │   ├── directives/
-│   │   │   │   │   │   └── highlight.directive.ts
-│   │   │   │   │   │
-│   │   │   │   │   └── pipes/
-│   │   │   │   │       ├── date-format.pipe.ts
-│   │   │   │   │       ├── price-format.pipe.ts
-│   │   │   │   │       └── truncate.pipe.ts
-│   │   │   │   │
-│   │   │   │   ├── app.component.ts
-│   │   │   │   ├── app.component.html
-│   │   │   │   ├── app.component.scss
-│   │   │   │   ├── app.config.ts
-│   │   │   │   └── app.routes.ts
-│   │   │   │
-│   │   │   ├── assets/
-│   │   │   │   ├── images/
-│   │   │   │   ├── icons/
-│   │   │   │   └── i18n/
-│   │   │   │
-│   │   │   ├── environments/
-│   │   │   │   ├── environment.ts
-│   │   │   │   └── environment.prod.ts
-│   │   │   │
-│   │   │   ├── styles/
-│   │   │   │   ├── _variables.scss
-│   │   │   │   ├── _mixins.scss
-│   │   │   │   └── styles.scss
-│   │   │   │
-│   │   │   ├── index.html
-│   │   │   └── main.ts
-│   │   │
+│   │   │   │   └── shared/
+│   │   │   └── environments/
+│   │   │       ├── environment.ts
+│   │   │       │   # apiBaseUrl: 'http://localhost:8080/api/v1'
+│   │   │       └── environment.prod.ts
+│   │   │           # apiBaseUrl: 'https://api.amigusto.com/api/v1'
 │   │   └── project.json
 │   │
-│   └── admin-panel/              # App de administración
-│       ├── src/
-│       │   ├── app/
-│       │   │   ├── core/
-│       │   │   │   └── (similar a portal)
-│       │   │   │
-│       │   │   ├── features/
-│       │   │   │   ├── queue/
-│       │   │   │   │   ├── queue.component.ts
-│       │   │   │   │   └── queue.component.html
-│       │   │   │   ├── review/
-│       │   │   │   │   ├── review.component.ts
-│       │   │   │   │   └── review.component.html
-│       │   │   │   ├── promoters/
-│       │   │   │   │   ├── promoters.component.ts
-│       │   │   │   │   └── promoters.component.html
-│       │   │   │   └── dashboard/
-│       │   │   │       ├── dashboard.component.ts
-│       │   │   │       └── dashboard.component.html
-│       │   │   │
-│       │   │   └── shared/
-│       │   │       └── (componentes compartidos)
-│       │   │
-│       │   └── (igual estructura que portal)
-│       │
-│       └── project.json
+│   └── admin-panel/                # Admin Panel
+│       └── (estructura similar)
 │
 ├── angular.json
 ├── package.json
-├── tsconfig.json
-└── README.md
-```
-
-### 5.2 Convenciones de Código Angular
-
-**Naming:**
-- Components: kebab-case files, PascalCase classes (`event-card.component.ts`, `EventCardComponent`)
-- Services: kebab-case files con sufijo `.service.ts` (`auth.service.ts`, `AuthService`)
-- Interfaces: PascalCase con prefijo "I" opcional (`IEvent` o `Event`)
-- Enums: PascalCase (`EventStatus`)
-
-**Component Structure:**
-```typescript
-@Component({
-  selector: 'app-event-card',
-  standalone: true,
-  imports: [CommonModule, MatCardModule],
-  templateUrl: './event-card.component.html',
-  styleUrls: ['./event-card.component.scss']
-})
-export class EventCardComponent implements OnInit {
-  // ...
-}
+└── tsconfig.json
 ```
 
 ---
 
-## 6. GITIGNORE RECOMENDADO POR PROYECTO
+## 7. DOCKER COMPOSE PARA DESARROLLO LOCAL
 
-### 6.1 Backend (Java Spring Boot)
+### 7.1 docker-compose.yml
+
+```yaml
+version: '3.8'
+
+services:
+  # ========== INFRAESTRUCTURA ==========
+
+  postgres:
+    image: postgis/postgis:16-3.4
+    container_name: amigusto-postgres
+    ports:
+      - "5432:5432"
+    environment:
+      POSTGRES_DB: amigusto
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    networks:
+      - amigusto-network
+
+  redis:
+    image: redis:7-alpine
+    container_name: amigusto-redis
+    ports:
+      - "6379:6379"
+    command: redis-server --requirepass redispass
+    networks:
+      - amigusto-network
+
+  rabbitmq:
+    image: rabbitmq:3-management-alpine
+    container_name: amigusto-rabbitmq
+    ports:
+      - "5672:5672"   # AMQP
+      - "15672:15672" # Management UI
+    environment:
+      RABBITMQ_DEFAULT_USER: rabbitmq
+      RABBITMQ_DEFAULT_PASS: rabbitmq
+    networks:
+      - amigusto-network
+
+  zipkin:
+    image: openzipkin/zipkin:latest
+    container_name: amigusto-zipkin
+    ports:
+      - "9411:9411"
+    networks:
+      - amigusto-network
+
+  # ========== SPRING CLOUD INFRASTRUCTURE ==========
+
+  eureka-server:
+    build: ./eureka-server
+    container_name: amigusto-eureka
+    ports:
+      - "8761:8761"
+    networks:
+      - amigusto-network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8761/actuator/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+
+  config-server:
+    build: ./config-server
+    container_name: amigusto-config-server
+    ports:
+      - "8888:8888"
+    environment:
+      EUREKA_CLIENT_SERVICEURL_DEFAULTZONE: http://eureka-server:8761/eureka/
+      GIT_URI: https://github.com/amigusto/config-repo
+    depends_on:
+      - eureka-server
+    networks:
+      - amigusto-network
+
+  # ========== MICROSERVICIOS ==========
+
+  auth-service:
+    build: ./auth-service
+    container_name: amigusto-auth-service
+    ports:
+      - "8081:8081"
+    environment:
+      SPRING_PROFILES_ACTIVE: dev
+      EUREKA_CLIENT_SERVICEURL_DEFAULTZONE: http://eureka-server:8761/eureka/
+      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/amigusto
+      SPRING_DATASOURCE_USERNAME: postgres
+      SPRING_DATASOURCE_PASSWORD: postgres
+      SPRING_DATA_REDIS_HOST: redis
+      SPRING_DATA_REDIS_PASSWORD: redispass
+      SPRING_RABBITMQ_HOST: rabbitmq
+      SPRING_ZIPKIN_BASEURL: http://zipkin:9411
+    depends_on:
+      - postgres
+      - redis
+      - rabbitmq
+      - eureka-server
+      - config-server
+    networks:
+      - amigusto-network
+
+  event-service:
+    build: ./event-service
+    container_name: amigusto-event-service
+    ports:
+      - "8082:8082"
+    environment:
+      SPRING_PROFILES_ACTIVE: dev
+      EUREKA_CLIENT_SERVICEURL_DEFAULTZONE: http://eureka-server:8761/eureka/
+      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/amigusto
+      SPRING_DATA_REDIS_HOST: redis
+      SPRING_RABBITMQ_HOST: rabbitmq
+      SPRING_ZIPKIN_BASEURL: http://zipkin:9411
+    depends_on:
+      - postgres
+      - redis
+      - rabbitmq
+      - eureka-server
+      - config-server
+    networks:
+      - amigusto-network
+
+  user-service:
+    build: ./user-service
+    container_name: amigusto-user-service
+    ports:
+      - "8083:8083"
+    environment:
+      SPRING_PROFILES_ACTIVE: dev
+      EUREKA_CLIENT_SERVICEURL_DEFAULTZONE: http://eureka-server:8761/eureka/
+      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/amigusto
+      SPRING_RABBITMQ_HOST: rabbitmq
+    depends_on:
+      - postgres
+      - rabbitmq
+      - eureka-server
+      - config-server
+    networks:
+      - amigusto-network
+
+  promoter-service:
+    build: ./promoter-service
+    container_name: amigusto-promoter-service
+    ports:
+      - "8084:8084"
+    environment:
+      SPRING_PROFILES_ACTIVE: dev
+      EUREKA_CLIENT_SERVICEURL_DEFAULTZONE: http://eureka-server:8761/eureka/
+      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/amigusto
+      SPRING_RABBITMQ_HOST: rabbitmq
+    depends_on:
+      - postgres
+      - rabbitmq
+      - eureka-server
+    networks:
+      - amigusto-network
+
+  notification-service:
+    build: ./notification-service
+    container_name: amigusto-notification-service
+    ports:
+      - "8085:8085"
+    environment:
+      SPRING_PROFILES_ACTIVE: dev
+      EUREKA_CLIENT_SERVICEURL_DEFAULTZONE: http://eureka-server:8761/eureka/
+      SPRING_DATA_MONGODB_URI: mongodb://mongo:27017/notifications
+      SPRING_RABBITMQ_HOST: rabbitmq
+    depends_on:
+      - rabbitmq
+      - eureka-server
+    networks:
+      - amigusto-network
+
+  storage-service:
+    build: ./storage-service
+    container_name: amigusto-storage-service
+    ports:
+      - "8086:8086"
+    environment:
+      SPRING_PROFILES_ACTIVE: dev
+      EUREKA_CLIENT_SERVICEURL_DEFAULTZONE: http://eureka-server:8761/eureka/
+      AWS_ACCESS_KEY_ID: ${AWS_ACCESS_KEY_ID}
+      AWS_SECRET_ACCESS_KEY: ${AWS_SECRET_ACCESS_KEY}
+    depends_on:
+      - eureka-server
+    networks:
+      - amigusto-network
+
+  api-gateway:
+    build: ./api-gateway
+    container_name: amigusto-api-gateway
+    ports:
+      - "8080:8080"
+    environment:
+      SPRING_PROFILES_ACTIVE: dev
+      EUREKA_CLIENT_SERVICEURL_DEFAULTZONE: http://eureka-server:8761/eureka/
+    depends_on:
+      - eureka-server
+      - auth-service
+      - event-service
+      - user-service
+      - promoter-service
+      - notification-service
+      - storage-service
+    networks:
+      - amigusto-network
+
+networks:
+  amigusto-network:
+    driver: bridge
+
+volumes:
+  postgres-data:
+```
+
+### 7.2 Comandos Docker Compose
+
+```bash
+# Levantar toda la infraestructura
+docker-compose up -d
+
+# Ver logs de un servicio específico
+docker-compose logs -f event-service
+
+# Ver logs de todos los servicios
+docker-compose logs -f
+
+# Reiniciar un servicio
+docker-compose restart event-service
+
+# Parar todos los servicios
+docker-compose down
+
+# Parar y eliminar volúmenes
+docker-compose down -v
+
+# Rebuild de un servicio específico
+docker-compose build event-service
+docker-compose up -d event-service
+```
+
+---
+
+## 8. GITIGNORE RECOMENDADO (POR TECNOLOGÍA)
+
+### 8.1 Backend (Microservicios - Java)
 
 ```gitignore
 # Maven
 target/
 pom.xml.tag
 pom.xml.releaseBackup
-pom.xml.versionsBackup
 
 # Gradle
 .gradle/
@@ -701,10 +1077,12 @@ build/
 .project
 .settings/
 
-# Application properties
-application-dev.yml
-application-local.yml
+# Application config (con secretos)
+**/application-local.yml
+**/application-dev.yml
+**/bootstrap-local.yml
 *.env
+.env.local
 
 # Logs
 logs/
@@ -715,14 +1093,13 @@ logs/
 Thumbs.db
 ```
 
-### 6.2 iOS (Swift)
+### 8.2 iOS
 
 ```gitignore
 # Xcode
 xcuserdata/
 *.xcodeproj/*
 !*.xcodeproj/project.pbxproj
-!*.xcworkspace/contents.xcworkspacedata
 
 # SPM
 .swiftpm/
@@ -730,7 +1107,6 @@ xcuserdata/
 
 # CocoaPods
 Pods/
-*.podspec
 
 # Build
 DerivedData/
@@ -743,7 +1119,7 @@ Configuration.plist
 .DS_Store
 ```
 
-### 6.3 Android (Kotlin)
+### 8.3 Android
 
 ```gitignore
 # Gradle
@@ -754,27 +1130,21 @@ local.properties
 # Android Studio
 .idea/
 *.iml
-.externalNativeBuild
-.cxx
 
 # Keystore
 *.jks
 *.keystore
 
-# Build
-app/release/
-
 # OS
 .DS_Store
 ```
 
-### 6.4 Web (Angular)
+### 8.4 Web (Angular)
 
 ```gitignore
 # Dependencies
 node_modules/
 npm-debug.log
-yarn-error.log
 
 # Build
 dist/
@@ -794,23 +1164,70 @@ dist/
 
 ---
 
-## 7. CI/CD PIPELINE SUGERIDO
+## 9. CI/CD PIPELINE (GITHUB ACTIONS)
 
-### 7.1 Backend (GitHub Actions)
+### 9.1 Ejemplo: Event Service CI/CD
 
 ```yaml
-# .github/workflows/backend-ci.yml
-name: Backend CI/CD
+# .github/workflows/event-service-ci.yml
+name: Event Service CI/CD
 
 on:
   push:
     branches: [main, develop]
+    paths:
+      - 'event-service/**'
+      - '.github/workflows/event-service-ci.yml'
   pull_request:
     branches: [main]
+    paths:
+      - 'event-service/**'
 
 jobs:
-  build:
+  test:
     runs-on: ubuntu-latest
+
+    services:
+      postgres:
+        image: postgis/postgis:16-3.4
+        env:
+          POSTGRES_DB: test
+          POSTGRES_USER: test
+          POSTGRES_PASSWORD: test
+        ports:
+          - 5432:5432
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 6379:6379
+
+    steps:
+      - uses: actions/checkout@v3
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v3
+        with:
+          java-version: '17'
+          distribution: 'temurin'
+          cache: maven
+
+      - name: Run tests
+        working-directory: ./event-service
+        run: mvn clean test
+
+      - name: Run integration tests
+        working-directory: ./event-service
+        run: mvn verify -P integration-tests
+
+      - name: Upload test coverage
+        uses: codecov/codecov-action@v3
+        with:
+          files: ./event-service/target/site/jacoco/jacoco.xml
+
+  build:
+    needs: test
+    runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/main'
 
     steps:
       - uses: actions/checkout@v3
@@ -822,89 +1239,73 @@ jobs:
           distribution: 'temurin'
 
       - name: Build with Maven
-        run: ./mvnw clean install
-
-      - name: Run tests
-        run: ./mvnw test
+        working-directory: ./event-service
+        run: mvn clean package -DskipTests
 
       - name: Build Docker image
-        run: docker build -t amigusto-backend .
-```
+        working-directory: ./event-service
+        run: |
+          docker build -t amigusto/event-service:${{ github.sha }} .
+          docker tag amigusto/event-service:${{ github.sha }} amigusto/event-service:latest
 
-### 7.2 iOS (Xcode Cloud o Fastlane)
+      - name: Login to Docker Hub
+        uses: docker/login-action@v2
+        with:
+          username: ${{ secrets.DOCKER_USERNAME }}
+          password: ${{ secrets.DOCKER_PASSWORD }}
 
-```ruby
-# Fastfile
-lane :test do
-  run_tests(scheme: "AmigustoiOS")
-end
+      - name: Push Docker image
+        run: |
+          docker push amigusto/event-service:${{ github.sha }}
+          docker push amigusto/event-service:latest
 
-lane :beta do
-  build_app(scheme: "AmigustoiOS")
-  upload_to_testflight
-end
-```
-
-### 7.3 Android (GitHub Actions)
-
-```yaml
-# .github/workflows/android-ci.yml
-name: Android CI
-
-on: [push, pull_request]
-
-jobs:
-  build:
+  deploy:
+    needs: build
     runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/main'
 
     steps:
       - uses: actions/checkout@v3
 
-      - name: Set up JDK 17
-        uses: actions/setup-java@v3
+      - name: Deploy to Kubernetes
+        uses: azure/k8s-deploy@v4
         with:
-          java-version: '17'
-
-      - name: Build with Gradle
-        run: ./gradlew build
-
-      - name: Run tests
-        run: ./gradlew test
-```
-
-### 7.4 Web (GitHub Actions)
-
-```yaml
-# .github/workflows/web-ci.yml
-name: Web CI/CD
-
-on: [push, pull_request]
-
-jobs:
-  build:
-    runs-on: ubuntu-latest
-
-    steps:
-      - uses: actions/checkout@v3
-
-      - name: Setup Node.js
-        uses: actions/setup-node@v3
-        with:
-          node-version: '18'
-
-      - name: Install dependencies
-        run: npm ci
-
-      - name: Lint
-        run: npm run lint
-
-      - name: Test
-        run: npm test
-
-      - name: Build
-        run: npm run build
+          manifests: |
+            k8s/microservices/event-service-deployment.yml
+            k8s/microservices/event-service-service.yml
+          images: |
+            amigusto/event-service:${{ github.sha }}
+          kubectl-version: 'latest'
 ```
 
 ---
 
-Esta arquitectura está 100% alineada con el stack actualizado: **Java Spring Boot, iOS nativo (Swift), Android nativo (Kotlin), y Angular**. No hay referencias a tecnologías obsoletas.
+## 🎯 Resumen de Arquitectura
+
+### Microservicios (7 servicios):
+1. **API Gateway** :8080 - Punto de entrada único
+2. **Auth Service** :8081 - Autenticación, JWT
+3. **Event Service** :8082 - Eventos, búsqueda geoespacial
+4. **User Service** :8083 - Consumidores, eventos guardados
+5. **Promoter Service** :8084 - Promotores, verificación
+6. **Notification Service** :8085 - Emails, push
+7. **Storage Service** :8086 - Upload imágenes S3
+
+### Infraestructura:
+- **Eureka Server** :8761 - Service Discovery
+- **Config Server** :8888 - Configuración centralizada
+- **RabbitMQ** :5672 - Message Broker
+- **Redis** :6379 - Cache compartido
+- **Zipkin** :9411 - Distributed Tracing
+- **PostgreSQL** :5432 - Databases (DB per service)
+- **MongoDB** :27017 - Notification Service DB
+
+### Clientes (transparentes a microservicios):
+- **iOS** - Swift + SwiftUI → API Gateway :8080
+- **Android** - Kotlin + Compose → API Gateway :8080
+- **Web** - Angular → API Gateway :8080
+
+---
+
+**Última actualización:** 2025-10-26
+**Versión:** 2.0.0 - Arquitectura de Microservicios

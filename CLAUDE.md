@@ -8,6 +8,28 @@ Este archivo proporciona orientación a Claude Code (claude.ai/code) cuando trab
 
 A diferencia de competidores como Fever que priorizan sus propias ventas de tickets, Amigusto es un filtro imparcial que prioriza las preferencias del usuario (gustos), dando el mismo peso a eventos gratuitos y de pago basándose en relevancia.
 
+### Arquitectura de Backend
+
+**IMPORTANTE**: El backend se implementa como **arquitectura de microservicios** usando Spring Cloud:
+
+- **API Gateway** (Spring Cloud Gateway) - Puerto 8080
+- **Service Discovery** (Netflix Eureka) - Puerto 8761
+- **Config Server** (Spring Cloud Config) - Puerto 8888
+- **Auth Service** - Puerto 8081 (Autenticación, JWT)
+- **Event Service** - Puerto 8082 (Eventos, búsqueda geoespacial)
+- **User Service** - Puerto 8083 (Consumidores, eventos guardados)
+- **Promoter Service** - Puerto 8084 (Promotores, verificación)
+- **Notification Service** - Puerto 8085 (Emails, push notifications)
+- **Storage Service** - Puerto 8086 (Upload imágenes S3/Cloudinary)
+
+**Comunicación**:
+- Síncrona: Spring Cloud OpenFeign (REST)
+- Asíncrona: RabbitMQ (eventos)
+- Cache: Redis compartido
+- Tracing: Zipkin + Sleuth
+
+Consulta **ARQUITECTURA_MICROSERVICIOS.md** para detalles completos.
+
 ## Lógica de Negocio Central: Flujo de Curación Humana
 
 El diferenciador de la plataforma es su proceso de curación humana:
@@ -425,23 +447,40 @@ export const environment = {
 
 ## Archivos de Documentación
 
-- **README.md**: Visión general del proyecto y inicio rápido
-- **PLAN_TECNICO_AMIGUSTO.md**: Arquitectura técnica completa y plan de implementación
-- **GUIA_INICIO_RAPIDO.md**: Guía detallada de setup para cada plataforma
-- **ARQUITECTURA_PROYECTO.md**: Estructura de carpetas y organización de código
-- **DIAGRAMAS.md**: Diagramas visuales de arquitectura (Mermaid)
-- **EJEMPLOS_CODIGO.md**: Ejemplos de código para cada plataforma
+### Arquitectura
+- **ARQUITECTURA_MICROSERVICIOS.md**: 🔴 Arquitectura completa de microservicios (PRINCIPAL)
+- **MICROSERVICIOS_RESUMEN.md**: Resumen ejecutivo de microservicios
+- **ARQUITECTURA_FUNCIONAL_DETALLADA.md**: Flujos funcionales detallados con arquitectura de microservicios
+
+### Planificación
+- **PLAN_TECNICO_AMIGUSTO.md**: Plan de implementación por fases
+- **GUIA_INICIO_RAPIDO.md**: Setup local de microservicios
+
+### Estructura de Código
+- **ARQUITECTURA_PROYECTO.md**: Estructura de carpetas por microservicio
+- **EJEMPLOS_CODIGO.md**: Ejemplos de código (Controllers, Services, Feign, RabbitMQ)
+
+### Visualización
+- **DIAGRAMAS.md**: Diagramas de arquitectura (Mermaid)
 
 ## Patrones Comunes a Seguir
 
-### Backend: Crear una nueva entidad
+### Backend (Microservicio): Crear una nueva entidad
 
-1. Crear clase `@Entity` en `model/entity/`
-2. Crear DTOs en `model/dto/request/` y `model/dto/response/`
-3. Crear interfaz `Repository` extendiendo `JpaRepository`
-4. Crear `Service` con métodos `@Transactional`
-5. Crear `Controller` con `@RestController` y anotaciones de seguridad apropiadas
-6. Agregar migración Flyway en `resources/db/migration/`
+**IMPORTANTE**: Primero determina en QUÉ microservicio debe vivir la entidad.
+
+1. Identificar microservicio responsable (Event Service, User Service, etc.)
+2. Crear clase `@Entity` en `{servicio}/model/entity/`
+3. Crear DTOs en `{servicio}/model/dto/request/` y `response/`
+4. Crear interfaz `Repository` extendiendo `JpaRepository`
+5. Crear `Service` con métodos `@Transactional`
+6. Crear `Controller` con `@RestController`
+7. Agregar migración Flyway en `{servicio}/resources/db/migration/`
+8. **Si otros servicios necesitan los datos**:
+   - Opción A: Crear `FeignClient` en el servicio consumidor
+   - Opción B: Publicar eventos vía RabbitMQ para replicación
+9. Actualizar Swagger/OpenAPI docs del servicio
+10. Configurar Circuit Breaker si hay llamadas Feign
 
 ### iOS: Crear una nueva funcionalidad
 

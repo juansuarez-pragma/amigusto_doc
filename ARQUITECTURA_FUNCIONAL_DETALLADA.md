@@ -16,7 +16,7 @@
 
 ---
 
-## 1. Visión General de la Arquitectura
+## 1. Visión General de la Arquitectura (Microservicios)
 
 ### 1.1 Diagrama de Alto Nivel
 
@@ -31,73 +31,174 @@
          └──────────────────┼───────────────────┘
                             │ HTTPS/REST API
                    ┌────────▼────────┐
-                   │  API Gateway    │ ← Rate Limiting (Bucket4j)
-                   │  (Nginx/Cloud)  │ ← SSL/TLS Termination
-                   └────────┬────────┘
+                   │  🚪 API GATEWAY │ ← Spring Cloud Gateway
+                   │  Port: 8080     │ ← JWT Validation
+                   └────────┬────────┘ ← Rate Limiting
                             │
-                   ┌────────▼────────┐
-                   │  Spring Boot    │ ← JWT Authentication
-                   │  Backend API    │ ← Business Logic
-                   │  Java 17        │ ← State Machine Events
-                   └────────┬────────┘
+        ┌───────────────────┼───────────────────────┐
+        │  🔍 Eureka Server │  ⚙️ Config Server     │
+        │  Discovery :8761  │  Git Config :8888     │
+        └───────────────────┴───────────────────────┘
                             │
-         ┌──────────────────┼──────────────────┐
-         │                  │                  │
-    ┌────▼────┐      ┌──────▼──────┐    ┌─────▼─────┐
-    │ PostGIS │      │   Redis 7   │    │  AWS S3/  │
-    │   DB    │      │   Cache     │    │Cloudinary │
-    │Primary  │      │   Sessions  │    │  Images   │
-    └─────────┘      └─────────────┘    └───────────┘
+    ┌─────────┬─────────────┼─────────────┬──────────────┐
+    │         │             │             │              │
+┌───▼───┐ ┌──▼────┐  ┌─────▼─────┐ ┌────▼──────┐ ┌────▼────────┐
+│ AUTH  │ │ EVENT │  │   USER    │ │ PROMOTER  │ │NOTIFICATION │
+│:8081  │ │ :8082 │  │   :8083   │ │  :8084    │ │   :8085     │
+└───┬───┘ └──┬────┘  └─────┬─────┘ └────┬──────┘ └────┬────────┘
+    │        │             │             │             │
+    │  ┌─────▼─────────────▼─────────────▼─────────────▼────┐
+    │  │         📨 RABBITMQ (Message Broker)                │
+    │  │         Events: user.*, event.*, cache.*            │
+    │  └─────────────────────────────────────────────────────┘
+    │        │             │             │             │
+┌───▼────────▼─────────────▼─────────────▼─────────────▼────────┐
+│             CAPA DE DATOS (Database per Service)               │
+├────────────────────────────────────────────────────────────────┤
+│ auth_db   event_db    user_db    promoter_db  notification_db │
+│ Postgres  PostGIS     Postgres   Postgres     MongoDB         │
+│                                                                 │
+│ 🗄️ Redis (Shared Cache)  📊 Zipkin (Tracing)  📦 S3/Cloud    │
+└────────────────────────────────────────────────────────────────┘
 ```
 
-### 1.2 Principios Arquitectónicos
+### 1.2 Principios Arquitectónicos (Microservicios)
 
-**Separación de Responsabilidades:**
-- **Frontend (Apps/Web)**: Presentación, validación de UI, caché local
-- **Backend API (Spring Boot)**: Lógica de negocio, validación de datos, orquestación
-- **Base de Datos (PostgreSQL)**: Persistencia, integridad referencial, consultas complejas
-- **Caché (Redis)**: Datos de acceso frecuente, sesiones de usuario
-- **Storage (S3/Cloudinary)**: Almacenamiento de activos estáticos (imágenes)
+**1. Single Responsibility:**
+- Cada microservicio tiene UNA responsabilidad clara y bien definida
+- Auth Service: Autenticación y gestión de usuarios
+- Event Service: CRUD de eventos, búsqueda geoespacial
+- User Service: Perfiles de consumidores, eventos guardados
+- Promoter Service: Gestión de promotores, verificación
+- Notification Service: Emails, push notifications
+
+**2. Database per Service:**
+- Cada servicio tiene su propia base de datos independiente
+- NO hay acceso directo cross-database
+- Comunicación solo vía API (Feign) o eventos (RabbitMQ)
+
+**3. API Gateway Pattern:**
+- Punto de entrada único para todos los clientes
+- Routing, autenticación centralizada, rate limiting
+- Load balancing vía Eureka (client-side)
+
+**4. Event-Driven Architecture:**
+- Comunicación asíncrona con RabbitMQ para desacoplamiento
+- Ejemplo: Auth Service publica `user.created` → User/Promoter/Notification Services consumen
+
+**5. Circuit Breaker Pattern:**
+- Resiliencia con Resilience4j
+- Fallbacks cuando servicios downstream fallan
+- Prevención de cascading failures
+
+**6. Distributed Tracing:**
+- Sleuth + Zipkin para observabilidad
+- Trace IDs propagados entre servicios
 
 ---
 
-## 2. Stack Tecnológico y Justificaciones
+## 2. Stack Tecnológico y Justificaciones (Microservicios)
 
-### 2.1 Backend: Java 17 + Spring Boot 3.2
+### 2.1 Backend: Java 17 + Spring Boot 3.2 + Spring Cloud 2023
 
-**¿Por qué Spring Boot?**
+**¿Por qué Microservicios con Spring Cloud?**
 
-1. **Ecosistema Maduro**: Spring Security, Spring Data JPA, Spring Cache, Spring Actuator
-2. **Performance**: Tomcat/Netty embebido optimizado para alta concurrencia
-3. **Escalabilidad**: Fácil migración a microservicios con Spring Cloud
-4. **Transacciones**: `@Transactional` para ACID en operaciones críticas
-5. **Validación**: Jakarta Bean Validation integrada
-6. **OpenAPI**: Documentación automática con Springdoc
+1. **Escalabilidad Independiente**: Cada servicio escala según su carga
+2. **Resiliencia**: Fallos aislados, circuit breakers, retries
+3. **Tecnología Apropiada**: MongoDB para Notifications, PostgreSQL+PostGIS para Events
+4. **Deployment Independiente**: Actualizar un servicio sin afectar otros
+5. **Equipos Autónomos**: Desarrollo paralelo en distintos servicios
+6. **Observabilidad**: Distributed tracing, métricas por servicio
 
-**Dependencias Clave:**
+**Dependencias Clave por Microservicio:**
+
 ```xml
-<!-- pom.xml -->
-<dependency>
-    <groupId>org.springframework.boot</groupId>
-    <artifactId>spring-boot-starter-web</artifactId> <!-- REST API -->
-</dependency>
-<dependency>
-    <groupId>org.springframework.boot</groupId>
-    <artifactId>spring-boot-starter-data-jpa</artifactId> <!-- ORM -->
-</dependency>
-<dependency>
-    <groupId>org.springframework.boot</groupId>
-    <artifactId>spring-boot-starter-security</artifactId> <!-- Autenticación -->
-</dependency>
-<dependency>
-    <groupId>org.springframework.boot</groupId>
-    <artifactId>spring-boot-starter-data-redis</artifactId> <!-- Caché -->
-</dependency>
-<dependency>
-    <groupId>org.postgresql</groupId>
-    <artifactId>postgresql</artifactId> <!-- Driver PostgreSQL -->
-</dependency>
-<dependency>
+<!-- pom.xml - Auth Service -->
+<dependencies>
+    <!-- Spring Boot Core -->
+    <dependency>
+        <groupId>org.springframework.boot</groupId>
+        <artifactId>spring-boot-starter-web</artifactId>
+    </dependency>
+    <dependency>
+        <groupId>org.springframework.boot</groupId>
+        <artifactId>spring-boot-starter-data-jpa</artifactId>
+    </dependency>
+    <dependency>
+        <groupId>org.springframework.boot</groupId>
+        <artifactId>spring-boot-starter-security</artifactId>
+    </dependency>
+
+    <!-- Spring Cloud - Microservices -->
+    <dependency>
+        <groupId>org.springframework.cloud</groupId>
+        <artifactId>spring-cloud-starter-netflix-eureka-client</artifactId>
+    </dependency>
+    <dependency>
+        <groupId>org.springframework.cloud</groupId>
+        <artifactId>spring-cloud-starter-config</artifactId>
+    </dependency>
+    <dependency>
+        <groupId>org.springframework.cloud</groupId>
+        <artifactId>spring-cloud-starter-sleuth</artifactId>
+    </dependency>
+    <dependency>
+        <groupId>org.springframework.cloud</groupId>
+        <artifactId>spring-cloud-sleuth-zipkin</artifactId>
+    </dependency>
+
+    <!-- RabbitMQ -->
+    <dependency>
+        <groupId>org.springframework.boot</groupId>
+        <artifactId>spring-boot-starter-amqp</artifactId>
+    </dependency>
+
+    <!-- Database -->
+    <dependency>
+        <groupId>org.postgresql</groupId>
+        <artifactId>postgresql</artifactId>
+    </dependency>
+
+    <!-- JWT -->
+    <dependency>
+        <groupId>io.jsonwebtoken</groupId>
+        <artifactId>jjwt-api</artifactId>
+        <version>0.11.5</version>
+    </dependency>
+</dependencies>
+```
+
+```xml
+<!-- pom.xml - Event Service (adicional a las anteriores) -->
+<dependencies>
+    <!-- Feign for inter-service communication -->
+    <dependency>
+        <groupId>org.springframework.cloud</groupId>
+        <artifactId>spring-cloud-starter-openfeign</artifactId>
+    </dependency>
+
+    <!-- Resilience4j for Circuit Breaker -->
+    <dependency>
+        <groupId>io.github.resilience4j</groupId>
+        <artifactId>resilience4j-spring-boot2</artifactId>
+    </dependency>
+    <dependency>
+        <groupId>io.github.resilience4j</groupId>
+        <artifactId>resilience4j-circuitbreaker</artifactId>
+    </dependency>
+
+    <!-- PostGIS for geospatial queries -->
+    <dependency>
+        <groupId>org.hibernate</groupId>
+        <artifactId>hibernate-spatial</artifactId>
+    </dependency>
+
+    <!-- Redis Cache -->
+    <dependency>
+        <groupId>org.springframework.boot</groupId>
+        <artifactId>spring-boot-starter-data-redis</artifactId>
+    </dependency>
+    <dependency>
     <groupId>io.jsonwebtoken</groupId>
     <artifactId>jjwt</artifactId> <!-- JWT Tokens -->
 </dependency>
@@ -260,35 +361,65 @@ public class StorageService {
 
 ## 3. Funcionalidades B2C - Apps Móviles
 
-### 3.1 Registro de Usuario Consumer
+### 3.1 Registro de Usuario Consumer (Microservicios)
 
-**Flujo Técnico Completo:**
+**Flujo Técnico Completo con Microservicios:**
 
 ```
 Usuario (iOS/Android)
     ↓ 1. Ingresa email, password, nombre
     ↓ 2. Validación frontend (email válido, password >= 8 chars)
-    ↓ 3. POST /api/v1/auth/register/consumer
+    ↓ 3. POST https://api.amigusto.com/api/v1/auth/register/consumer
     ↓    Body: { email, password, name }
     ↓    Headers: Content-Type: application/json
-Backend (Spring Boot)
-    ↓ 4. AuthController recibe RegisterRequest
-    ↓ 5. Validación con @Valid (Jakarta Validation)
-    ↓ 6. AuthService.registerConsumer()
+API Gateway (:8080)
+    ↓ 4. Recibe request
+    ↓ 5. NO require JWT (ruta pública)
+    ↓ 6. Enruta a → lb://AUTH-SERVICE (via Eureka)
+Auth Service (:8081)
+    ↓ 7. AuthController recibe RegisterRequest
+    ↓ 8. Validación con @Valid (Jakarta Validation)
+    ↓ 9. AuthService.registerConsumer()
     ↓    - Verifica email no duplicado (UserRepository)
     ↓    - Hash password con BCrypt (BCryptPasswordEncoder)
     ↓    - Crea User entity con role=CONSUMER
-    ↓ 7. Guarda en PostgreSQL (transaccional)
-PostgreSQL
-    ↓ 8. INSERT INTO users (id, email, password_hash, name, role)
-Backend
-    ↓ 9. Genera JWT Access Token (15 min expiration)
-    ↓ 10. Genera JWT Refresh Token (7 días expiration)
-    ↓ 11. Guarda Refresh Token en Redis con TTL 7 días
-Redis
-    ↓ 12. SET refresh_token:{userId} {token} EX 604800
-Backend
-    ↓ 13. Retorna AuthResponse
+    ↓ 10. Guarda en auth_db PostgreSQL (transaccional)
+auth_db (PostgreSQL)
+    ↓ 11. INSERT INTO users (id, email, password_hash, name, role)
+    ↓     VALUES ('uuid', 'user@example.com', '$2a$10...', 'Juan', 'CONSUMER')
+Auth Service
+    ↓ 12. Genera JWT Access Token (15 min expiration)
+    ↓ 13. Genera JWT Refresh Token (7 días expiration)
+    ↓ 14. Guarda Refresh Token en auth_db
+auth_db
+    ↓ 15. INSERT INTO refresh_tokens (user_id, token, expires_at)
+Auth Service
+    ↓ 16. 📨 PUBLICA EVENTO A RABBITMQ
+    ↓     Exchange: user.events (Topic)
+    ↓     Routing Key: user.created
+    ↓     Payload: { userId, email, name, role: "CONSUMER" }
+RabbitMQ
+    ↓ 17. Enruta mensaje a queues:
+    ↓     - user-service.user.created
+    ↓     - notification-service.user.created
+User Service (:8083)
+    ↓ 18. 📨 CONSUME EVENTO user.created
+    ↓ 19. Crea Consumer en user_db
+user_db (PostgreSQL)
+    ↓ 20. INSERT INTO consumers (id, email, name)
+    ↓     VALUES ('uuid', 'user@example.com', 'Juan')
+Notification Service (:8085)
+    ↓ 21. 📨 CONSUME EVENTO user.created
+    ↓ 22. Envía email de bienvenida (Spring Mail)
+    ↓ 23. Guarda log en notification_db
+notification_db (MongoDB)
+    ↓ 24. db.email_logs.insertOne({
+    ↓       to: 'user@example.com',
+    ↓       subject: 'Bienvenido a Amigusto',
+    ↓       sentAt: ISODate()
+    ↓     })
+Auth Service
+    ↓ 25. Retorna AuthResponse al cliente
     ↓     {
     ↓       "accessToken": "eyJhbGciOiJIUzI1NiIs...",
     ↓       "refreshToken": "eyJhbGciOiJIUzI1NiIs...",
@@ -478,11 +609,11 @@ public class GustoService {
 
 ---
 
-### 3.3 Descubrimiento de Eventos (Feed Personalizado)
+### 3.3 Descubrimiento de Eventos (Feed Personalizado) - Microservicios
 
 **Esta es la funcionalidad CORE de Amigusto.**
 
-**Flujo Técnico Detallado:**
+**Flujo Técnico Detallado con Microservicios:**
 
 ```
 Usuario (iOS/Android)
@@ -493,67 +624,79 @@ Android: FusedLocationProviderClient.lastLocation
     ↓ 3. Carga gustos del usuario desde caché local
 iOS: UserDefaults / CoreData
 Android: SharedPreferences / Room
-    ↓ 4. GET /api/v1/events/discover
+    ↓ 4. GET https://api.amigusto.com/api/v1/events/discover
     ↓    Query Params:
     ↓      - lat=40.4168 (latitud usuario)
     ↓      - lng=-3.7038 (longitud usuario)
     ↓      - gustoIds=uuid1,uuid2,uuid3 (gustos del usuario)
     ↓      - city=Madrid (ciudad detectada o seleccionada)
+    ↓      - radiusKm=50 (radio de búsqueda)
     ↓      - page=0 (paginación)
     ↓      - size=20 (eventos por página)
     ↓    Headers:
     ↓      - Authorization: Bearer {accessToken}
-Backend (Spring Boot)
-    ↓ 5. JwtAuthenticationFilter valida token
+API Gateway (:8080)
+    ↓ 5. JWT Authentication Filter
+    ↓    - Valida token JWT
     ↓    - Extrae userId del JWT
-    ↓    - Verifica firma y expiración
-    ↓ 6. EventController.discoverEvents()
-    ↓ 7. Verifica caché Redis
-    ↓    Cache Key: discover:Madrid:uuid1-uuid2-uuid3:page0
-Redis
-    ↓ 8. GET discover:Madrid:uuid1-uuid2-uuid3:page0
-    ↓    - Si HIT: retornar desde caché (response time ~5ms)
-    ↓    - Si MISS: continuar a DB
-Backend
-    ↓ 9. EventService.discoverEvents(lat, lng, gustoIds, city, pageable)
-    ↓ 10. EventRepository.findByGustosAndCity() con query geoespacial
-PostgreSQL + PostGIS
-    ↓ 11. Ejecuta query compleja:
+    ↓    - Agrega header X-User-Id para downstream services
+    ↓ 6. Rate Limiting Filter
+    ↓    - Verifica límite de requests (100 req/min por usuario)
+    ↓ 7. Enruta a → lb://EVENT-SERVICE (via Eureka)
+Event Service (:8082)
+    ↓ 8. EventController.discoverEvents() recibe request
+    ↓ 9. Verifica caché Redis (compartido)
+    ↓    Cache Key: amigusto:event:discover:Madrid:uuid1-uuid2-uuid3:40.41:-3.70:page0
+Redis (Shared Cache)
+    ↓ 10. GET amigusto:event:discover:Madrid:...
+    ↓     - Si HIT: retornar desde caché (response time ~5ms) ✅
+    ↓     - Si MISS: continuar a DB
+Event Service
+    ↓ 12. EventService.discoverEvents(lat, lng, gustoIds, city, radiusKm, pageable)
+    ↓ 13. EventRepository.findByGustosAndCity() con query geoespacial
+event_db (PostgreSQL + PostGIS)
+    ↓ 14. Ejecuta query compleja con PostGIS:
 ```
 
 ```sql
+-- Query en event_db (PostgreSQL + PostGIS)
 SELECT DISTINCT e.*
 FROM events e
 INNER JOIN event_gustos eg ON e.id = eg.event_id
-WHERE e.status = 'APPROVED'
-  AND e.city = 'Madrid'
-  AND e.start_date > NOW()
-  AND eg.gusto_id IN ('uuid1', 'uuid2', 'uuid3')
+WHERE e.status = 'APPROVED'              -- Solo eventos aprobados
+  AND e.city = 'Madrid'                  -- Ciudad seleccionada
+  AND e.start_date > NOW()               -- Eventos futuros
+  AND eg.gusto_id IN ('uuid1', 'uuid2', 'uuid3')  -- Gustos del usuario
   AND (
+      -- Fórmula de Haversine para calcular distancia
       6371 * acos(
           cos(radians(40.4168)) * cos(radians(e.lat))
           * cos(radians(e.lng) - radians(-3.7038))
           + sin(radians(40.4168)) * sin(radians(e.lat))
       )
   ) < 50  -- Radio de 50km
-ORDER BY e.start_date ASC
-LIMIT 20 OFFSET 0;
+ORDER BY e.start_date ASC                -- Ordenar por fecha más cercana
+LIMIT 20 OFFSET 0;                       -- Paginación
 ```
 
 ```
-PostgreSQL
-    ↓ 12. Usa índices:
+event_db (PostgreSQL + PostGIS)
+    ↓ 15. Usa índices:
     ↓     - idx_events_status (WHERE status = 'APPROVED')
     ↓     - idx_events_city (WHERE city = 'Madrid')
-    ↓     - idx_events_location (GIST spatial index)
+    ↓     - idx_events_location (GIST spatial index para cálculos geoespaciales)
     ↓     - idx_event_gustos_gusto (JOIN optimization)
-Backend
-    ↓ 13. Mapea resultados a EventResponse DTOs
-    ↓ 14. Guarda en Redis con TTL 5 minutos
-Redis
-    ↓ 15. SET discover:Madrid:uuid1-uuid2-uuid3:page0 [JSON] EX 300
-Backend
-    ↓ 16. Retorna PageResponse<EventResponse>
+Event Service
+    ↓ 16. Mapea resultados a EventResponse DTOs
+    ↓ 17. Guarda en Redis compartido con TTL 5 minutos
+Redis (Shared Cache)
+    ↓ 18. SET amigusto:event:discover:Madrid:uuid1-uuid2-uuid3:40.41:-3.70:page0 [JSON] EX 300
+Event Service
+    ↓ 19. Retorna PageResponse<EventResponse> al API Gateway
+API Gateway
+    ↓ 20. Retorna response al cliente
+App Móvil
+    ↓ 21. Recibe PageResponse<EventResponse>
     ↓     {
     ↓       "content": [
     ↓         {
@@ -856,26 +999,60 @@ Promotor (Angular)
     ↓      Authorization: Bearer {accessToken}
     ↓      Content-Type: application/json
 Backend
-    ↓ 10. JwtAuthenticationFilter valida token
-    ↓     - Extrae promoterId
+API Gateway (:8080)
+    ↓ 10. JWT Authentication Filter
+    ↓     - Valida token JWT
+    ↓     - Extrae promoterId del token
     ↓     - Verifica role == PROMOTER
-    ↓ 11. EventController.createEvent(@Valid request, @CurrentUser)
-    ↓ 12. Validaciones Jakarta Bean Validation:
+    ↓     - Agrega header X-User-Id: {promoterId}
+    ↓ 11. Enruta a → lb://EVENT-SERVICE
+Event Service (:8082)
+    ↓ 12. EventController.createEvent(@Valid request, @CurrentUser)
+    ↓ 13. Validaciones Jakarta Bean Validation:
     ↓     - @NotBlank, @Size, @Future, @DecimalMin, etc.
-    ↓ 13. EventService.createEvent(request, promoterId)
-PostgreSQL
-    ↓ 14. Transaction BEGIN
-    ↓     - Verifica Promoter existe y está VERIFIED
+    ↓ 14. EventService.createEvent(request, promoterId)
+    ↓ 15. 🔗 FEIGN CALL a Promoter Service
+    ↓     - promoterClient.getPromoter(promoterId)
+Promoter Service (:8084)
+    ↓ 16. Valida que promotor existe y status == VERIFIED
+promoter_db (PostgreSQL)
+    ↓ 17. SELECT * FROM promoters WHERE id = ? AND status = 'VERIFIED'
+Promoter Service
+    ↓ 18. Retorna PromoterResponse (200 OK)
+    ↓     { id, organizationName, status: "VERIFIED" }
+Event Service
+    ↓ 19. Si promotor NO está verificado → lanza BusinessException
+    ↓     "Solo promotores verificados pueden crear eventos"
+    ↓ 20. Si promotor OK → continúa con creación
+event_db (PostgreSQL + PostGIS)
+    ↓ 21. @Transactional BEGIN
     ↓     - Crea Event con status = DRAFT
-    ↓     - INSERT INTO events (...)
-    ↓     - INSERT INTO event_gustos (event_id, gusto_id) para cada gusto
+    ↓     - INSERT INTO events (id, promoter_id, title, ..., status)
+    ↓       VALUES ('uuid', 'promoter-uuid', 'Concierto Jazz', ..., 'DRAFT')
+    ↓     - INSERT INTO event_gustos (event_id, gusto_id)
+    ↓       VALUES ('event-uuid', 'gusto-uuid-1'), ('event-uuid', 'gusto-uuid-2')
     ↓     Transaction COMMIT
-Backend
-    ↓ 15. Retorna EventResponse con status = DRAFT
+Event Service
+    ↓ 22. 📨 PUBLICA EVENTO A RABBITMQ
+    ↓     Exchange: event.events (Topic)
+    ↓     Routing Key: event.created
+    ↓     Payload: { eventId, promoterId, title, createdAt }
+RabbitMQ
+    ↓ 23. Enruta a queue: promoter-service.event.created
+Promoter Service (:8084)
+    ↓ 24. 📨 CONSUME EVENTO event.created
+    ↓ 25. Actualiza métricas del promotor
+promoter_db
+    ↓ 26. UPDATE promoters SET total_events = total_events + 1
+    ↓     WHERE id = 'promoter-uuid'
+Event Service
+    ↓ 27. Retorna EventResponse con status = DRAFT al API Gateway
+API Gateway
+    ↓ 28. Retorna response al cliente
 Promotor (Angular)
-    ↓ 16. Muestra Snackbar: "Evento creado como borrador"
-    ↓ 17. Navega a lista de eventos del promotor
-    ↓ 18. Puede editar o enviar a revisión
+    ↓ 29. Muestra Snackbar: "Evento creado como borrador"
+    ↓ 30. Navega a lista de eventos del promotor
+    ↓ 31. Puede editar o enviar a revisión
 ```
 
 **Tecnologías Clave:**
@@ -1041,7 +1218,7 @@ Admin (Angular)
 
 ---
 
-### 5.2 Aprobar Evento
+### 5.2 Aprobar Evento (Microservicios con Event-Driven Architecture)
 
 **Flujo Técnico Crítico:**
 
@@ -1050,46 +1227,99 @@ Admin (Angular)
     ↓ 1. Revisa evento en detalle
     ↓ 2. Verifica calidad: título correcto, imagen apropiada, etc.
     ↓ 3. Click "Aprobar Evento"
-    ↓ 4. POST /api/v1/events/{eventId}/approve
+    ↓ 4. POST https://api.amigusto.com/api/v1/events/{eventId}/approve
     ↓    Headers: Authorization: Bearer {accessToken}
-Backend
-    ↓ 5. EventController.approveEvent(eventId, @CurrentUser adminId)
-    ↓ 6. Validaciones:
+API Gateway (:8080)
+    ↓ 5. JWT Authentication Filter
+    ↓    - Valida token JWT
+    ↓    - Verifica role == ADMIN
+    ↓    - Agrega header X-User-Id: {adminId}
+    ↓ 6. Enruta a → lb://EVENT-SERVICE
+Event Service (:8082)
+    ↓ 7. EventController.approveEvent(eventId, @CurrentUser adminId)
+    ↓ 8. Validaciones @PreAuthorize("hasRole('ADMIN')"):
     ↓    - Evento existe
     ↓    - Estado actual == PENDING_REVIEW
     ↓    - Usuario es ADMIN
-    ↓ 7. EventService.approveEvent(eventId, adminId)
-PostgreSQL
-    ↓ 8. Transaction BEGIN
-    ↓    UPDATE events
-    ↓    SET status = 'APPROVED',
-    ↓        reviewed_by = ?,  -- adminId
-    ↓        reviewed_at = NOW(),
-    ↓        published_at = NOW()  -- timestamp de publicación
-    ↓    WHERE id = ? AND status = 'PENDING_REVIEW'
-    ↓    Transaction COMMIT
-Backend
-    ↓ 9. **CRÍTICO**: Invalida TODOS los cachés afectados
-Redis
-    ↓ 10. Invalidación en cascada:
-    ↓     DEL pending_events:*
+    ↓ 9. EventService.approveEvent(eventId, adminId)
+event_db (PostgreSQL)
+    ↓ 10. @Transactional BEGIN
+    ↓     UPDATE events
+    ↓     SET status = 'APPROVED',
+    ↓         reviewed_by = ?,        -- adminId
+    ↓         reviewed_at = NOW(),
+    ↓         published_at = NOW()    -- timestamp de publicación
+    ↓     WHERE id = ? AND status = 'PENDING_REVIEW'
+    ↓     Transaction COMMIT
+Event Service
+    ↓ 11. **CRÍTICO**: Invalida TODOS los cachés afectados
+Redis (Shared Cache)
+    ↓ 12. Invalidación en cascada:
+    ↓     DEL amigusto:event:pending_events:*
     ↓       (cola de admin ya no incluye este evento)
     ↓
-    ↓     DEL discover:{city}:*
+    ↓     DEL amigusto:event:discover:{city}:*
     ↓       (evento ahora visible en ciudad correspondiente)
     ↓
-    ↓     DEL event:{eventId}
+    ↓     DEL amigusto:event:detail:{eventId}
     ↓       (si alguien vio el detalle antes, actualizar estado)
-Backend
-    ↓ 11. [OPCIONAL] Notifica al promotor:
-    ↓     - Email: "Tu evento ha sido aprobado"
-    ↓     - Incluye link a evento publicado
-    ↓ 12. Retorna EventResponse con status = APPROVED
+Event Service
+    ↓ 13. 📨 PUBLICA EVENTO A RABBITMQ
+    ↓     Exchange: event.events (Topic)
+    ↓     Routing Key: event.approved
+    ↓     Payload: {
+    ↓       eventId,
+    ↓       promoterId,
+    ↓       title,
+    ↓       city,
+    ↓       startDate,
+    ↓       approvedAt,
+    ↓       approvedBy: adminId
+    ↓     }
+RabbitMQ
+    ↓ 14. Enruta mensaje a queues:
+    ↓     - notification-service.event.approved
+Notification Service (:8085)
+    ↓ 15. 📨 CONSUME EVENTO event.approved
+    ↓ 16. 🔗 FEIGN CALL a Promoter Service
+    ↓     - promoterClient.getPromoter(promoterId)
+Promoter Service (:8084)
+    ↓ 17. Obtiene datos del promotor
+promoter_db
+    ↓ 18. SELECT * FROM promoters WHERE id = ?
+Promoter Service
+    ↓ 19. Retorna PromoterResponse { email, organizationName }
+Notification Service
+    ↓ 20. Envía email al promotor (Spring Mail):
+    ↓     - To: promoter.email
+    ↓     - Subject: "Tu evento ha sido aprobado"
+    ↓     - Body: Template Thymeleaf con link al evento
+notification_db (MongoDB)
+    ↓ 21. db.email_logs.insertOne({
+    ↓       to: promoter.email,
+    ↓       subject: "Tu evento ha sido aprobado",
+    ↓       template: "event-approved",
+    ↓       eventId: eventId,
+    ↓       status: "SENT",
+    ↓       sentAt: ISODate()
+    ↓     })
+Notification Service
+    ↓ 22. Actualiza métricas del promotor (aprobado++)
+Promoter Service
+    ↓ 23. 📨 Recibe notificación de Notification Service
+promoter_db
+    ↓ 24. UPDATE promoters
+    ↓     SET approved_events = approved_events + 1
+    ↓     WHERE id = 'promoter-uuid'
+Event Service
+    ↓ 25. Retorna EventResponse con status = APPROVED al API Gateway
+API Gateway
+    ↓ 26. Retorna response al cliente
 Admin (Angular)
-    ↓ 13. Muestra Snackbar: "Evento aprobado y publicado"
-    ↓ 14. Remueve evento de la cola (actualiza lista)
+    ↓ 27. Muestra Snackbar: "Evento aprobado y publicado"
+    ↓ 28. Remueve evento de la cola (actualiza lista)
 Apps Móviles (Usuarios)
-    ↓ 15. Próximo refresh del feed (o pull-to-refresh)
+    ↓ 29. Próximo refresh del feed (o pull-to-refresh)
     ↓     → Evento aparece en resultados de descubrimiento
 ```
 

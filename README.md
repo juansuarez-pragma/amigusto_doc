@@ -1,31 +1,37 @@
 # Amigusto - Documentación Técnica
-## Motor de Descubrimiento de Eventos Hiper-Personalizado
+## Motor de Descubrimiento de Eventos Hiper-Personalizado con Microservicios
 
 > **"Cero ruido, solo tus intereses"**
+
+[![Java Version](https://img.shields.io/badge/Java-17-blue)](https://openjdk.org/)
+[![Spring Boot](https://img.shields.io/badge/Spring%20Boot-3.2-green)](https://spring.io/projects/spring-boot)
+[![Spring Cloud](https://img.shields.io/badge/Spring%20Cloud-2023-green)](https://spring.io/projects/spring-cloud)
+[![Microservices](https://img.shields.io/badge/Architecture-Microservices-orange)]()
 
 ---
 
 ## Índice de Documentación
 
-Este repositorio contiene toda la documentación técnica necesaria para implementar el MVP de Amigusto. A continuación, encontrarás una guía de qué documento revisar según tu necesidad.
+Este repositorio contiene toda la documentación técnica necesaria para implementar el MVP de Amigusto con arquitectura de **microservicios**. A continuación, encontrarás una guía de qué documento revisar según tu necesidad.
 
 ---
 
 ## 📚 Documentos Principales
 
 ### 1. [PLAN_TECNICO_AMIGUSTO.md](./PLAN_TECNICO_AMIGUSTO.md)
-**Documento maestro con la arquitectura completa del sistema**
+**Documento maestro con la arquitectura completa del sistema (MICROSERVICIOS)**
 
 📋 **Contenido:**
-- Arquitectura general del sistema (diagramas de alto nivel)
+- Arquitectura de microservicios (diagramas de alto nivel)
 - Stack tecnológico completo:
-  - **Backend**: Java 17 + Spring Boot 3.2
+  - **Backend**: Java 17 + Spring Boot 3.2 + **Spring Cloud** (Microservicios)
   - **iOS**: Swift 5.9 + SwiftUI
   - **Android**: Kotlin 1.9 + Jetpack Compose
   - **Web**: Angular 17 + Material
-- Diseño completo de base de datos (SQL + JPA)
-- Arquitectura de API REST (endpoints, DTOs, Spring Security)
-- Plan de implementación por fases (8 fases, 23 semanas)
+- **Database per Service Pattern** (PostgreSQL por servicio, MongoDB para Notifications)
+- Arquitectura de API con API Gateway (Spring Cloud Gateway)
+- Comunicación entre servicios (Feign + RabbitMQ)
+- Plan de implementación por fases con setup de infraestructura de microservicios
 - Consideraciones de seguridad, escalabilidad y costos
 - KPIs y métricas de éxito
 
@@ -37,16 +43,95 @@ Este repositorio contiene toda la documentación técnica necesaria para impleme
 
 ---
 
-### 2. [GUIA_INICIO_RAPIDO.md](./GUIA_INICIO_RAPIDO.md)
+### 1.1 [ARQUITECTURA_MICROSERVICIOS.md](./ARQUITECTURA_MICROSERVICIOS.md)
+**Documentación técnica detallada de la arquitectura de microservicios**
+
+📋 **Contenido:**
+- Listado completo de los 7 microservicios (Auth, Event, User, Promoter, Notification, Storage, API Gateway)
+- Infraestructura compartida (Eureka, Config Server, RabbitMQ, Redis, Zipkin)
+- Patrones de comunicación:
+  - **Síncrona**: Spring Cloud OpenFeign con Circuit Breakers
+  - **Asíncrona**: RabbitMQ con Topic/Fanout exchanges
+- Resilience patterns (Circuit Breaker, Retry, Timeout con Resilience4j)
+- Distributed Tracing con Zipkin + Sleuth
+- Docker Compose completo
+- Manifiestos de Kubernetes
+- Pipeline CI/CD por microservicio
+
+👥 **Para quién:**
+- Backend Developers
+- DevOps Engineers
+- Arquitectos de Software
+
+---
+
+### 1.2 [MICROSERVICIOS_RESUMEN.md](./MICROSERVICIOS_RESUMEN.md)
+**Resumen ejecutivo de la arquitectura de microservicios**
+
+📋 **Contenido:**
+- Resumen de cada microservicio con responsabilidades
+- Ventajas de microservicios (escalado independiente, resiliencia, etc.)
+- Desafíos de microservicios (complejidad operacional, debugging)
+- Recomendaciones para MVP (cuándo usar microservicios vs monolito)
+- Estrategia de migración gradual
+
+👥 **Para quién:**
+- Product Managers
+- Tech Leads que necesitan decisión arquitectónica
+- Stakeholders no técnicos
+
+---
+
+### 2. [ARQUITECTURA_PROYECTO.md](./ARQUITECTURA_PROYECTO.md)
+**Estructura de carpetas y organización del código (MICROSERVICIOS)**
+
+📋 **Contenido:**
+- Estructura de monorepo para microservicios
+- Organización de cada microservicio (Auth, Event, User, Promoter, Notification, Storage)
+- Estructura del Config Server repository
+- Docker Compose completo con todos los servicios
+- Kubernetes manifests organization
+- CI/CD pipelines por microservicio
+- Git ignore patterns por tecnología
+
+👥 **Para quién:**
+- Backend Developers
+- DevOps Engineers
+- Nuevos developers uniéndose al proyecto
+
+---
+
+### 3. [EJEMPLOS_CODIGO.md](./EJEMPLOS_CODIGO.md)
+**Ejemplos de código para cada plataforma (incluye patrones de microservicios)**
+
+📋 **Contenido:**
+- Ejemplos de backend (Spring Boot + Spring Cloud):
+  - **Feign Clients** con Circuit Breakers
+  - **RabbitMQ Publishers y Consumers**
+  - **Resilience4j** (Circuit Breaker, Retry, Timeout)
+  - **API Gateway Filters** (JWT, Rate Limiting)
+  - **Config Server** setup
+  - **Distributed Tracing** con Sleuth
+- Ejemplos de iOS (Swift + SwiftUI + MVVM)
+- Ejemplos de Android (Kotlin + Compose + Clean Architecture)
+- Ejemplos de Angular (Standalone Components + Reactive Forms)
+
+👥 **Para quién:**
+- Todos los developers
+- Excelente para copiar/pegar código base
+
+---
+
+### 4. [GUIA_INICIO_RAPIDO.md](./GUIA_INICIO_RAPIDO.md)
 **Setup inicial paso a paso para comenzar a desarrollar**
 
 📋 **Contenido:**
-- Prerequisites (Java, Xcode, Android Studio, Node.js)
-- Setup de Spring Boot con Maven/Gradle
+- Prerequisites (Java, Docker, Xcode, Android Studio, Node.js)
+- **Setup de microservicios** con Docker Compose
 - Setup de proyectos iOS (Xcode) y Android (Android Studio)
 - Setup de proyectos Angular (Portal + Admin)
-- Configuración de PostgreSQL + Redis
-- Docker Compose para desarrollo local
+- Configuración de PostgreSQL multi-database + MongoDB + Redis + RabbitMQ
+- Levantar Eureka Server, Config Server, API Gateway
 - Flujo de trabajo diario
 - Troubleshooting común
 
@@ -199,28 +284,58 @@ Este flujo garantiza **cero spam** y **alta calidad** de contenido.
 
 ---
 
-## 🛠️ Stack Tecnológico (Resumen)
+## 🛠️ Stack Tecnológico (Microservicios)
+
+### Backend (Microservicios)
 
 | Componente | Tecnología |
 |------------|------------|
-| **Backend API** | Java 17 + Spring Boot 3.2 |
-| **Base de Datos** | PostgreSQL 16 + PostGIS |
+| **Framework** | Java 17 + Spring Boot 3.2 |
+| **Microservices Infrastructure** | Spring Cloud 2023 |
+| **API Gateway** | Spring Cloud Gateway 4.0+ |
+| **Service Discovery** | Netflix Eureka |
+| **Config Server** | Spring Cloud Config |
+| **Load Balancing** | Spring Cloud LoadBalancer |
+| **Inter-Service Communication (Sync)** | Spring Cloud OpenFeign |
+| **Inter-Service Communication (Async)** | Spring AMQP + RabbitMQ 3.12 |
+| **Circuit Breaker** | Resilience4j |
+| **Distributed Tracing** | Spring Cloud Sleuth + Zipkin |
+| **Base de Datos** | PostgreSQL 16 + PostGIS, MongoDB 7 |
+| **Database Pattern** | Database per Service |
 | **ORM** | Spring Data JPA + Hibernate |
-| **Cache** | Redis 7 + Spring Data Redis |
-| **App iOS** | Swift 5.9 + SwiftUI |
-| **App Android** | Kotlin 1.9 + Jetpack Compose |
-| **Portal Web B2B** | Angular 17 + Material |
-| **Panel Admin** | Angular 17 + Material |
-| **Build (Backend)** | Maven 3.9 / Gradle 8 |
-| **Build (iOS)** | Xcode 15 + SPM |
+| **Cache** | Redis 7 (shared) + Lettuce |
+| **Security** | Spring Security + JWT |
+| **API Docs** | Springdoc OpenAPI (Swagger) por servicio |
+| **Build Tool** | Maven 3.9+ |
+| **Testing** | JUnit 5 + Mockito + Testcontainers |
+| **Storage** | AWS S3 / Cloudinary |
+| **Email** | Spring Mail + Thymeleaf |
+
+### Frontend & Mobile
+
+| Componente | Tecnología |
+|------------|------------|
+| **App iOS** | Swift 5.9 + SwiftUI + MVVM |
+| **App Android** | Kotlin 1.9 + Jetpack Compose + Clean Architecture |
+| **Portal Web B2B** | Angular 17 (Standalone) + Material |
+| **Panel Admin** | Angular 17 (Standalone) + Material |
+| **Build (iOS)** | Xcode 15 + Swift Package Manager |
 | **Build (Android)** | Gradle 8.2 + Kotlin DSL |
 | **Build (Web)** | npm + Angular CLI |
-| **Testing (Backend)** | JUnit 5 + Mockito |
 | **Testing (iOS)** | XCTest + XCUITest |
-| **Testing (Android)** | JUnit + Espresso |
+| **Testing (Android)** | JUnit + Espresso + Compose Testing |
 | **Testing (Web)** | Jasmine + Karma + Cypress |
-| **API Docs** | Springdoc OpenAPI (Swagger) |
-| **Security** | Spring Security + JWT |
+
+### DevOps & Infrastructure
+
+| Componente | Tecnología |
+|------------|------------|
+| **Containerization** | Docker + Docker Compose |
+| **Orchestration** | Kubernetes |
+| **CI/CD** | GitHub Actions |
+| **Monitoring** | Prometheus + Grafana + Zipkin |
+| **Logging** | ELK Stack (Elasticsearch, Logback, Kibana) |
+| **APM** | Micrometer + Actuator |
 
 ---
 
@@ -362,28 +477,71 @@ Si eres nuevo en alguna de las tecnologías del stack:
 
 ## ⚡️ Quick Start (TL;DR)
 
-```bash
-# Backend (Spring Boot)
-cd amigusto-backend
-./mvnw spring-boot:run
-# ✅ API: http://localhost:8080
-# ✅ Swagger UI: http://localhost:8080/swagger-ui.html
+### Backend (Microservicios con Docker Compose)
 
-# iOS
+```bash
+# Clonar repositorio
+git clone https://github.com/amigusto/amigusto-backend.git
+cd amigusto-backend
+
+# Levantar TODA la infraestructura de microservicios
+docker-compose up -d
+
+# Verificar que todos los servicios están corriendo
+docker-compose ps
+
+# Ver logs
+docker-compose logs -f
+```
+
+**Servicios Disponibles:**
+- ✅ API Gateway: http://localhost:8080
+- ✅ Eureka Dashboard: http://localhost:8761
+- ✅ RabbitMQ Management: http://localhost:15672 (guest/guest)
+- ✅ Zipkin Tracing: http://localhost:9411
+- ✅ Auth Service (Swagger): http://localhost:8081/swagger-ui.html
+- ✅ Event Service (Swagger): http://localhost:8082/swagger-ui.html
+- ✅ User Service (Swagger): http://localhost:8083/swagger-ui.html
+- ✅ Promoter Service (Swagger): http://localhost:8084/swagger-ui.html
+- ✅ Storage Service (Swagger): http://localhost:8086/swagger-ui.html
+
+**Health Checks:**
+```bash
+# Verificar salud de todos los servicios
+curl http://localhost:8081/actuator/health  # Auth Service
+curl http://localhost:8082/actuator/health  # Event Service
+curl http://localhost:8083/actuator/health  # User Service
+```
+
+### iOS
+
+```bash
 cd amigusto-ios
 open AmigustoiOS.xcodeproj
 # Ejecutar en Xcode (⌘R)
+```
 
-# Android
+### Android
+
+```bash
 cd amigusto-android
 ./gradlew assembleDebug
 # Abrir en Android Studio y Run
+```
 
-# Web (Angular)
+### Web (Angular)
+
+```bash
 cd amigusto-web
 npm install
+
+# Portal para Promotores
 ng serve
 # ✅ Portal: http://localhost:4200
+
+# Panel Admin (en otra terminal)
+ng serve --project admin-panel --port 4201
+# ✅ Admin: http://localhost:4201
 ```
 
 ---
