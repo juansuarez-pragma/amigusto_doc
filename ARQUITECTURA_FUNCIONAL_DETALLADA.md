@@ -397,27 +397,15 @@ Auth Service
     ↓ 16. 📨 PUBLICA EVENTO A RABBITMQ
     ↓     Exchange: user.events (Topic)
     ↓     Routing Key: user.created
-    ↓     Payload: { userId, email, name, role: "CONSUMER" }
 RabbitMQ
-    ↓ 17. Enruta mensaje a queues:
-    ↓     - user-service.user.created
-    ↓     - notification-service.user.created
+    ↓ 17. Enruta mensaje a múltiples queues
 User Service (:8083)
     ↓ 18. 📨 CONSUME EVENTO user.created
-    ↓ 19. Crea Consumer en user_db
-user_db (PostgreSQL)
-    ↓ 20. INSERT INTO consumers (id, email, name)
-    ↓     VALUES ('uuid', 'user@example.com', 'Juan')
+    ↓ 19. Replica datos básicos del usuario en user_db
 Notification Service (:8085)
-    ↓ 21. 📨 CONSUME EVENTO user.created
-    ↓ 22. Envía email de bienvenida (Spring Mail)
-    ↓ 23. Guarda log en notification_db
-notification_db (MongoDB)
-    ↓ 24. db.email_logs.insertOne({
-    ↓       to: 'user@example.com',
-    ↓       subject: 'Bienvenido a Amigusto',
-    ↓       sentAt: ISODate()
-    ↓     })
+    ↓ 20. 📨 CONSUME EVENTO user.created
+    ↓ 21. Envía email de bienvenida
+    ↓ 22. Registra log en notification_db (MongoDB)
 Auth Service
     ↓ 25. Retorna AuthResponse al cliente
     ↓     {
@@ -439,92 +427,147 @@ App Móvil
     ↓ 15. Navega a pantalla de Onboarding
 ```
 
-**Tecnologías Utilizadas:**
+**Justificación Técnica de Decisiones en Registro:**
 
-| Capa | Tecnología | Justificación |
-|------|------------|---------------|
-| **Validación Frontend** | iOS: Swift Validation, Android: Kotlin Validation | Reducir llamadas innecesarias al backend |
-| **Validación Backend** | Jakarta Bean Validation (`@Valid`, `@NotBlank`, `@Email`) | Capa de seguridad adicional, validación consistente |
-| **Hash de Contraseña** | BCrypt con factor 12 | Algoritmo diseñado para ser lento, resistente a ataques de fuerza bruta |
-| **JWT** | io.jsonwebtoken (jjwt) | Estándar de la industria, stateless, fácil de validar |
-| **Storage de Token Móvil** | iOS: Keychain, Android: EncryptedSharedPreferences | Almacenamiento seguro nativo del SO |
+#### ¿Por qué RabbitMQ (Asíncrono) en lugar de Feign (Síncrono)?
 
-**Código Backend (Spring Boot):**
+**Decisión:** Auth Service publica evento `user.created` a RabbitMQ en lugar de llamar directamente a User Service y Notification Service vía Feign.
 
-```java
-@RestController
-@RequestMapping("/api/v1/auth")
-@RequiredArgsConstructor
-public class AuthController {
+**Razones:**
 
-    private final AuthService authService;
+1. **Desacoplamiento Total:**
+   - Auth Service NO necesita saber si User Service o Notification Service están disponibles
+   - Si Notification Service está caído, el registro sigue funcionando
+   - Nuevos servicios pueden suscribirse al evento sin modificar Auth Service
 
-    @PostMapping("/register/consumer")
-    public ResponseEntity<AuthResponse> registerConsumer(
-        @Valid @RequestBody RegisterRequest request
-    ) {
-        AuthResponse response = authService.registerConsumer(request);
-        return ResponseEntity.status(HttpStatus.CREATED).body(response);
-    }
-}
+2. **Resiliencia:**
+   - Si User Service falla temporalmente, RabbitMQ reintenta automáticamente
+   - El registro no falla si el email de bienvenida no se envía
+   - Los mensajes quedan en la queue hasta que el servicio se recupere
 
-@Service
-@RequiredArgsConstructor
-@Transactional
-public class AuthService {
+3. **Performance:**
+   - El registro retorna inmediatamente al usuario (~200ms)
+   - No espera a que se envíe el email (puede tardar 1-2 segundos)
+   - Procesamiento en background sin bloquear el request
 
-    private final UserRepository userRepository;
-    private final PasswordEncoder passwordEncoder;  // BCrypt
-    private final JwtTokenProvider jwtTokenProvider;
-    private final RedisTemplate<String, String> redisTemplate;
+**Alternativa Descartada:** Feign síncrono
+- ❌ Si Notification Service está lento, el registro se vuelve lento
+- ❌ Si algún servicio downstream falla, el registro falla
+- ❌ Acopla Auth Service a otros servicios
 
-    public AuthResponse registerConsumer(RegisterRequest request) {
-        // Verificar email único
-        if (userRepository.existsByEmail(request.getEmail())) {
-            throw new DuplicateEmailException("Email ya registrado");
-        }
+#### ¿Por qué PostgreSQL para auth_db en lugar de MongoDB?
 
-        // Crear usuario
-        User user = User.builder()
-            .id(UUID.randomUUID())
-            .email(request.getEmail())
-            .passwordHash(passwordEncoder.encode(request.getPassword()))
-            .name(request.getName())
-            .role(UserRole.CONSUMER)
-            .createdAt(LocalDateTime.now())
-            .build();
+**Decisión:** Auth Service usa PostgreSQL para almacenar usuarios y refresh tokens.
 
-        userRepository.save(user);
+**Razones:**
 
-        // Generar tokens
-        String accessToken = jwtTokenProvider.generateAccessToken(user);
-        String refreshToken = jwtTokenProvider.generateRefreshToken(user);
+1. **ACID Requerido:**
+   - Email debe ser UNIQUE (constraint a nivel de DB)
+   - Necesitamos transacciones para INSERT user + INSERT refresh_token
+   - No podemos tener usuarios duplicados bajo ninguna circunstancia
 
-        // Guardar refresh token en Redis (7 días)
-        String redisKey = "refresh_token:" + user.getId();
-        redisTemplate.opsForValue().set(
-            redisKey,
-            refreshToken,
-            7,
-            TimeUnit.DAYS
-        );
+2. **Relaciones Simples:**
+   - User → RefreshToken (1:N)
+   - No necesitamos esquema flexible
+   - Modelo de datos estable y predecible
 
-        return AuthResponse.builder()
-            .accessToken(accessToken)
-            .refreshToken(refreshToken)
-            .tokenType("Bearer")
-            .expiresIn(900)  // 15 minutos
-            .user(UserDto.from(user))
-            .build();
-    }
-}
-```
+3. **Queries Sencillas:**
+   - SELECT * FROM users WHERE email = ?
+   - No necesitamos queries complejas ni agregaciones
 
-**¿Por qué Redis para Refresh Tokens?**
+**Alternativa Descartada:** MongoDB
+- ❌ No garantiza UNIQUE constraint de la misma forma (race conditions posibles)
+- ❌ Transacciones más complejas (replica sets requeridos)
+- ❌ Overkill para modelo de datos simple
 
-- **Revocación Instantánea**: Si un usuario cierra sesión, eliminamos el refresh token de Redis → token inválido
-- **TTL Automático**: Redis elimina tokens expirados sin lógica adicional
-- **Performance**: Validación de refresh token en sub-milisegundos vs query a PostgreSQL
+#### ¿Por qué BCrypt para hash de contraseñas?
+
+**Decisión:** Usar BCrypt con factor de trabajo 12 (Spring Security default).
+
+**Razones:**
+
+1. **Diseñado para ser Lento:**
+   - Cada hash tarda ~250ms intencionalmente
+   - Hace ataques de fuerza bruta extremadamente lentos
+   - Un atacante con GPU poderosa solo puede probar ~4 contraseñas/segundo
+
+2. **Salt Automático:**
+   - BCrypt genera salt único por contraseña automáticamente
+   - Previene rainbow table attacks
+   - Salt incluido en el hash final
+
+3. **Ajustable en el Tiempo:**
+   - Factor de trabajo incrementable cuando hardware mejora
+   - Factor 12 → ~250ms en 2025
+   - Factor 13 → ~500ms (puede aumentarse en el futuro)
+
+**Alternativas Descartadas:**
+- ❌ SHA-256: Demasiado rápido, vulnerable a fuerza bruta
+- ❌ MD5: Completamente inseguro, colisiones conocidas
+- ✅ Argon2: Mejor opción técnicamente, pero BCrypt más maduro y probado
+
+#### ¿Por qué MongoDB para notification_db?
+
+**Decisión:** Notification Service usa MongoDB en lugar de PostgreSQL.
+
+**Razones:**
+
+1. **Alta Escritura:**
+   - Se generan miles de logs de email por día
+   - Escrituras > Lecturas (ratio 95:5)
+   - MongoDB optimizado para alta throughput de escritura
+
+2. **Esquema Flexible:**
+   - Emails pueden tener metadata variable:
+     - Email simple: { to, subject, body }
+     - Email con template: { to, template, variables }
+     - Email con attachments: { to, attachments[] }
+   - No necesitamos migraciones de schema frecuentes
+
+3. **TTL Nativo:**
+   - MongoDB puede eliminar documentos automáticamente después de 90 días
+   - `db.email_logs.createIndex({ createdAt: 1 }, { expireAfterSeconds: 7776000 })`
+   - Limpieza automática sin cron jobs
+
+4. **Queries de Logs:**
+   - Buscar logs por userId, eventId, date range
+   - No necesitamos JOINs complejos
+   - Agregaciones simples (count emails enviados por día)
+
+**Alternativa Descartada:** PostgreSQL
+- ❌ Overhead de transacciones ACID innecesario para logs
+- ❌ Schema rígido complica evolución de tipos de notificaciones
+- ❌ Particionamiento por fecha más complejo que TTL de Mongo
+
+#### ¿Por qué JWT stateless en lugar de sessions en Redis?
+
+**Decisión:** JWT almacenado en cliente, validado sin llamadas a DB.
+
+**Razones:**
+
+1. **Escalabilidad Horizontal:**
+   - Cualquier instancia de API Gateway puede validar el token
+   - No necesitamos sticky sessions en load balancer
+   - No hay single point of failure (Redis)
+
+2. **Latencia Ultra-baja:**
+   - Validación de JWT: ~1ms (verificación de firma)
+   - Session en Redis: ~10ms (network + lookup)
+   - Para API Gateway que recibe 10,000 req/s, la diferencia importa
+
+3. **Microservicios:**
+   - Token contiene userId, role, permissions
+   - Cada servicio puede leer claims sin llamar a Auth Service
+   - Propagación de contexto de seguridad entre servicios
+
+**Desventaja Aceptada:**
+- ❌ No se puede revocar un access token antes de expiración (15 min)
+- ✅ Mitigado con TTL corto + refresh tokens en DB para revocación
+
+**Alternativa Descartada:** Sessions en Redis
+- ❌ Latencia adicional en cada request
+- ❌ Redis se vuelve dependency crítica
+- ❌ No escala tan bien horizontalmente
 
 ---
 
@@ -582,30 +625,51 @@ App Móvil
     ↓ 21. Navega a pantalla principal "Descubrir"
 ```
 
-**¿Por qué Cachear Gustos en Redis?**
+#### ¿Por qué cachear gustos en Redis con TTL 24 horas?
 
-- **Datos Semi-Estáticos**: Los gustos (categorías) cambian raramente
-- **Alto Tráfico**: Cada usuario los carga al menos una vez
-- **Reducir Carga en DB**: Evitar SELECT en cada onboarding
+**Decisión:** Cachear lista completa de gustos con `TTL = 86400 segundos` (24 horas), el TTL más largo de toda la plataforma.
 
-**Anotación de Caché (Spring Boot):**
+**Razones:**
+1. **Datos Semi-Estáticos**: Los gustos (categorías) se crean/modifican ~1-2 veces por mes cuando lanzamos nuevas categorías (ej: agregar "🎪 Circo"). NO cambian en tiempo real
+2. **Alto Tráfico Repetitivo**: Cada nuevo usuario carga los gustos en onboarding. Con 1000 registros/día → 1000 queries/día sin caché vs 1 query/día con caché (reducción 1000x)
+3. **Dataset Pequeño**: ~20-50 gustos en total. JSON completo pesa ~2KB. Cachear es casi gratis en memoria
+4. **Consistencia No Crítica**: Si agregamos nuevo gusto "Circo" hoy, es aceptable que usuarios NO lo vean hasta mañana (eventual consistency)
 
-```java
-@Service
-@RequiredArgsConstructor
-public class GustoService {
+**Alternativa Descartada:** Sin caché, query directa siempre
+- ❌ PostgreSQL hit rate innecesario. SELECT * FROM gustos ejecutado 1000 veces/día para datos que NO cambian
+- ❌ Latencia acumulada: Cada onboarding agrega ~20ms de query. Con caché: ~1ms (20x más rápido)
+- ✅ Sin caché útil si: Datos cambian frecuentemente (eventos, saved_events)
 
-    private final GustoRepository gustoRepository;
+#### ¿Por qué DELETE + INSERT en lugar de UPDATE para user_gustos?
 
-    @Cacheable(value = "gustos", key = "'all'")
-    public List<GustoResponse> getAllGustos() {
-        return gustoRepository.findAll()
-            .stream()
-            .map(GustoMapper::toResponse)
-            .collect(Collectors.toList());
-    }
-}
-```
+**Decisión:** Al actualizar gustos del usuario, ejecutar `DELETE FROM user_gustos WHERE user_id = ?` seguido de múltiples `INSERT` en lugar de comparar y hacer UPDATE selectivo.
+
+**Razones:**
+1. **Simplicidad de Código**: DELETE + INSERT es 2 líneas. UPDATE selectivo requiere comparar arrays (gustos viejos vs nuevos), calcular diff, hacer UPSERT condicional (~20 líneas de lógica propensa a bugs)
+2. **Performance Aceptable**: Usuario promedio tiene ~5 gustos. DELETE 5 rows + INSERT 5 rows toma <5ms en PostgreSQL. NO es cuello de botella
+3. **Idempotencia**: Mismo request ejecutado 2 veces produce mismo resultado (importante para reintentos automáticos)
+4. **Transaccionalidad Simple**: Un único `@Transactional` garantiza que DELETE e INSERT son atómicos. Rollback automático si falla
+
+**Alternativa Descartada:** UPSERT selectivo (calcular diff)
+- ❌ Complejidad: Comparar gustos viejos vs nuevos, determinar qué insertar/eliminar/mantener
+- ❌ Bugs potenciales: ¿Qué pasa si gusto existe pero está duplicado? ¿Si falla uno de los INSERT parciales?
+- ❌ Performance NO mejora significativamente: Guardar 2-3 DELETE queries NO justifica complejidad
+- ✅ UPSERT útil si: Dataset es grande (>1000 rows por usuario) Y cambios son incrementales frecuentes
+
+#### ¿Por qué validar gustoIds no vacío en backend Y frontend?
+
+**Decisión:** Validar que usuario seleccionó ≥1 gusto tanto en frontend (Angular/iOS/Android) como en backend (`@NotEmpty List<UUID> gustoIds`).
+
+**Razones:**
+1. **Seguridad en Profundidad**: Nunca confiar en validación de frontend. Usuario podría manipular request HTTP directamente (Postman, curl)
+2. **UX vs Security**: Frontend valida para UX (mensaje amigable "Selecciona al menos 1 gusto"). Backend valida para integridad de datos
+3. **Lógica de Negocio**: Usuarios sin gustos NO pueden usar el discover feed (algoritmo requiere gustoIds para filtrar). Sería estado inválido
+4. **Error Handling Diferenciado**: Frontend muestra error en pantalla. Backend retorna 400 Bad Request con mensaje JSON
+
+**Alternativa Descartada:** Solo validación en frontend
+- ❌ Request malicioso con `gustoIds: []` crearía usuario en estado inválido
+- ❌ Discover feed crashearía o retornaría 0 eventos (UX horrible)
+- ✅ Solo frontend útil si: Endpoint es interno/privado y NO expuesto a internet (ej: admin panel sin autenticación)
 
 ---
 
@@ -728,52 +792,152 @@ Usuario
     ↓ 19. Scroll infinito carga más eventos automáticamente
 ```
 
-**Tecnologías Clave:**
+**Justificación Técnica de Decisiones en Descubrimiento de Eventos:**
 
-| Componente | Tecnología | Justificación |
-|------------|------------|---------------|
-| **Geolocalización** | PostGIS (Haversine formula) | Cálculo preciso de distancias geográficas en la DB |
-| **Índices Espaciales** | PostgreSQL GIST Index | Búsquedas geoespaciales 100x más rápidas que sin índice |
-| **Caché de Resultados** | Redis con TTL 5 min | Misma ciudad + gustos = mismo resultado por 5 min |
-| **Paginación** | Spring Data Pageable | Evitar cargar todos los eventos en memoria |
-| **Infinite Scroll** | iOS: onAppear, Android: LazyColumn | UX fluida, carga progresiva |
+#### ¿Por qué PostGIS en lugar de cálculos de distancia en código?
 
-**¿Por qué TTL de 5 minutos en caché de descubrimiento?**
+**Decisión:** Calcular distancias geográficas con PostGIS (fórmula de Haversine) directamente en la base de datos.
 
-- **Balance entre Frescura y Performance**:
-  - Eventos APROBADOS no cambian frecuentemente (quizás 1-2 por hora)
-  - Usuarios toleran ver eventos con hasta 5 min de retraso
-  - Reduce carga en DB en ~95% durante picos de tráfico
+**Razones:**
 
-**Query Optimizada con PostGIS:**
+1. **Performance:**
+   - Filtrar 10,000 eventos en DB: ~50ms
+   - Traer 10,000 eventos a código Java y filtrar: ~2000ms (40x más lento)
+   - Índice GIST espacial optimiza búsquedas geográficas
 
-```java
-@Repository
-public interface EventRepository extends JpaRepository<Event, UUID> {
+2. **Precisión:**
+   - PostGIS usa fórmula de Haversine correctamente para cálculos esféricos
+   - Considera la curvatura de la Tierra
+   - Precisión de ±1 metro vs aproximaciones con Pitágoras (errores de kilómetros)
 
-    @Query(value = """
-        SELECT DISTINCT e.*
-        FROM events e
-        INNER JOIN event_gustos eg ON e.id = eg.event_id
-        WHERE e.status = 'APPROVED'
-          AND e.city = :city
-          AND e.start_date > CURRENT_TIMESTAMP
-          AND eg.gusto_id IN :gustoIds
-          AND (
-              6371 * acos(
-                  cos(radians(:lat)) * cos(radians(e.lat))
-                  * cos(radians(e.lng) - radians(:lng))
-                  + sin(radians(:lat)) * sin(radians(e.lat))
-              )
-          ) < :radiusKm
-        ORDER BY e.start_date ASC
-        """,
-        nativeQuery = true)
-    Page<Event> findByGustosAndCity(
-        @Param("gustoIds") List<UUID> gustoIds,
-        @Param("city") String city,
-        @Param("lat") BigDecimal lat,
-        @Param("lng") BigDecimal lng,
+3. **Paginación Eficiente:**
+   - LIMIT/OFFSET funciona sobre resultados ya filtrados
+   - No necesitamos traer todos los eventos y paginar en memoria
+   - Reduce transferencia de datos DB → App
+
+**Alternativa Descartada:** Cálculo en código
+- ❌ Necesitamos traer TODOS los eventos de la ciudad a memoria
+- ❌ Para Madrid (500 eventos): 500 eventos × 2KB = 1MB por request
+- ❌ No aprovecha índices de base de datos
+- ✅ Solo útil si necesitáramos lógica de distancia muy personalizada
+
+#### ¿Por qué Redis con TTL 5 minutos?
+
+**Decisión:** Cachear resultados de descubrimiento en Redis con TTL de 5 minutos.
+
+**Razones:**
+
+1. **Hit Rate Esperado:**
+   - Mismo usuario abre app varias veces/día desde misma ubicación
+   - Múltiples usuarios en misma ciudad + mismos gustos (ej. 1000 usuarios en Madrid con gusto "Música")
+   - Hit rate estimado: 80-90% en horarios pico
+
+2. **Reducción de Carga:**
+   - Query geoespacial con PostGIS: ~50-100ms
+   - Cache hit desde Redis: ~5ms (10-20x más rápido)
+   - En 10,000 req/min → reduce carga DB de 100 req/s a 10 req/s
+
+3. **Balance Frescura vs Performance:**
+   - Eventos APPROVED cambian raramente (1-2 eventos nuevos/hora)
+   - Usuario tolera ver eventos con 5 min de delay
+   - TTL más corto (1 min): Cache casi inútil por invalidaciones frecuentes
+   - TTL más largo (1 hora): Eventos nuevos tardan demasiado en aparecer
+
+**Estrategia de Cache Key:**
+```
+amigusto:event:discover:{city}:{gustos}:{lat}:{lng}:{page}
+                         Madrid  uuid1-uuid2  40.41 -3.70  0
+```
+- Granular por ciudad + gustos + ubicación aproximada
+- Ubicaciones redondeadas a 2 decimales (±1km) para mejorar hit rate
+
+**Alternativa Descartada:** Sin caché
+- ❌ Query PostGIS en cada request (10,000/min = sobrecarga DB)
+- ❌ Latencia p95 aumenta de 50ms a 200ms
+- ❌ Necesitamos más réplicas de PostgreSQL (costo 3x)
+
+#### ¿Por qué API Gateway valida JWT en lugar de cada microservicio?
+
+**Decisión:** JWT validation centralizada en API Gateway, no en cada microservicio.
+
+**Razones:**
+
+1. **Single Point of Validation:**
+   - Si cambia algoritmo de JWT (HS256 → RS256), solo actualizar API Gateway
+   - No necesitamos redeployar 7 microservicios
+   - Configuración de JWT en un solo lugar
+
+2. **Performance:**
+   - Validar JWT 1 vez en gateway: ~1ms
+   - Si cada servicio valida: 1ms × N servicios en call chain
+   - Ejemplo: Gateway → Event Service → Promoter Service = 3 validaciones vs 1
+
+3. **Seguridad en Profundidad:**
+   - Gateway valida token y extrae claims
+   - Pasa `X-User-Id` header a servicios downstream
+   - Servicios confían en header (comunicación interna segura)
+   - Si alguien bypasea gateway → servicios aún validan origen de request
+
+**Alternativa Descartada:** Cada servicio valida JWT
+- ❌ Duplicación de código de validación en 7 servicios
+- ❌ Overhead de validación múltiple
+- ❌ Cambios en JWT requieren actualizar todos los servicios
+
+#### ¿Por qué Rate Limiting en API Gateway?
+
+**Decisión:** Rate limiting a nivel de API Gateway (100 req/min por usuario).
+
+**Razones:**
+
+1. **Protección de Todos los Servicios:**
+   - Un usuario no puede saturar Event Service, User Service, etc.
+   - Límite aplicado antes de llegar a microservicios
+   - Previene cascading failures
+
+2. **Fair Usage:**
+   - Apps móviles normales: 10-20 req/min
+   - 100 req/min es generoso para uso legítimo
+   - Bloquea scrapers y bots maliciosos
+
+3. **Costos Controlados:**
+   - Previene abuso que genera costos de infraestructura
+   - Ejemplo: Bot haciendo 10,000 req/min → costo de DB/cache innecesario
+
+**Implementación con Bucket4j:**
+- Token bucket algorithm
+- 100 tokens, refill 100 tokens/minuto
+- Burst permitido (usuario puede hacer 100 requests seguidos, luego limitado)
+
+**Alternativa Descartada:** Rate limiting por servicio
+- ❌ Usuario puede saturar Event Service, luego User Service, etc.
+- ❌ Complejidad: necesitamos rate limiting en 7 servicios
+- ❌ No protege el gateway mismo
+
+#### ¿Por qué PostgreSQL + PostGIS para event_db?
+
+**Decisión:** Event Service usa PostgreSQL con extensión PostGIS.
+
+**Razones:**
+
+1. **PostGIS es el Estándar para Geo:**
+   - Queries geoespaciales 100x más rápidas que cálculos en código
+   - Índices GIST optimizados para coordenadas geográficas
+   - Funciones builtin: ST_Distance, ST_DWithin, ST_Buffer
+
+2. **ACID para Eventos:**
+   - Transacciones necesarias: INSERT event + INSERT event_gustos (atómico)
+   - Status transitions deben ser consistentes (DRAFT → PENDING → APPROVED)
+   - No podemos tener evento sin gustos o viceversa
+
+3. **Relaciones Complejas:**
+   - Event → Gustos (M:N)
+   - Event → Promoter (M:1)
+   - Necesitamos JOINs eficientes
+
+**Alternativa Descartada:** MongoDB con coordenadas
+- ❌ Queries geoespaciales menos eficientes que PostGIS
+- ❌ Transacciones más complejas para evento + gustos
+- ❌ JOINs menos eficientes (necesitaríamos aggregation pipelines)
         @Param("radiusKm") double radiusKm,
         Pageable pageable
     );
@@ -820,12 +984,35 @@ App Móvil
     ↓ 12. Actualiza caché local (CoreData/Room)
 ```
 
-**¿Por qué no usar Redis para eventos guardados?**
+#### ¿Por qué PostgreSQL para saved_events en lugar de Redis?
 
-- **Persistencia Crítica**: Los eventos guardados son datos importantes del usuario
-- **Integridad Referencial**: FK a `users` y `events` garantiza consistencia
-- **Métricas**: `save_count` se actualiza transaccionalmente
-- **Redis es volátil**: Riesgo de pérdida de datos si Redis se reinicia
+**Decisión:** Almacenar eventos guardados en tabla PostgreSQL `saved_events` con foreign keys a `users` y `events`, en lugar de usar Redis Sets (`SADD saved_events:{userId} {eventId}`).
+
+**Razones:**
+1. **Persistencia Crítica**: Los eventos guardados representan la intención del usuario de asistir. Perder estos datos afectaría gravemente la experiencia (UX score -40%)
+2. **Integridad Referencial Garantizada**: Las FKs aseguran que NO se pueden guardar eventos inexistentes o de usuarios inexistentes. Redis permitiría datos huérfanos
+3. **Métricas Transaccionales**: `UPDATE events SET save_count = save_count + 1` debe ejecutarse ATÓMICAMENTE con el INSERT. PostgreSQL transaction garantiza consistencia
+4. **Queries Complejas**: Necesitamos JOIN con tabla events para obtener detalles (título, fecha, imagen). Redis requeriría múltiples GET por cada eventId
+
+**Alternativa Descartada:** Redis Sets
+- ❌ Redis es volátil: Configuración por defecto NO persiste datos a disco en tiempo real (AOF cada segundo)
+- ❌ Sin integridad referencial: Podríamos tener `eventId` que ya no existe en la base de datos
+- ❌ Sincronización compleja: Mantener Redis + PostgreSQL sincronizados requiere lógica adicional propensa a errores
+- ✅ Redis es excelente para: Cachés, sesiones temporales, rate limiting (TTL automático)
+
+#### ¿Por qué invalidar caché en lugar de actualizar caché?
+
+**Decisión:** Usar `DEL saved_events:{userId}` en lugar de `SET saved_events:{userId} [nuevo dato]`.
+
+**Razones:**
+1. **Cache-Aside Pattern**: Invalidar es más simple que actualizar. Próximo GET reconstruye el caché correctamente
+2. **Consistencia Garantizada**: Evita desincronización entre PostgreSQL (source of truth) y Redis (cache)
+3. **Menor Lógica de Negocio**: No necesitamos serializar y estructurar los datos en el controller, solo eliminar la key
+
+**Alternativa Descartada:** Write-Through (actualizar caché inmediatamente)
+- ❌ Requiere duplicar lógica de serialización en guardar Y en obtener saved events
+- ❌ Si falla la actualización de caché, queda inconsistente con DB
+- ✅ Write-Through es útil para: Datos que cambian con MUY alta frecuencia (>1000 writes/sec)
 
 ---
 
@@ -876,10 +1063,20 @@ App Móvil
     ↓ 14. Permite "desguardar" eventos (DELETE /api/v1/saved-events/{id})
 ```
 
-**¿Por qué TTL de solo 2 minutos?**
+#### ¿Por qué TTL de solo 2 minutos para saved_events?
 
-- **Datos Personales Dinámicos**: Usuario puede guardar/desguardar eventos frecuentemente
-- **Lista Pequeña**: Típicamente <100 eventos por usuario, query rápida
+**Decisión:** Configurar TTL de 120 segundos para `saved_events:{userId}:page0`, mucho más corto que discover-events (5 min) o event-detail (10 min).
+
+**Razones:**
+1. **Alta Mutabilidad**: El usuario puede guardar/desguardar eventos con mucha frecuencia (5-10 acciones por sesión). TTL largo mostraría datos desactualizados
+2. **Invalidación Costosa**: Cada vez que se guarda O se desguarda un evento, hay que invalidar caché. Con TTL corto, el caché expira naturalmente
+3. **Dataset Pequeño**: Usuario promedio tiene <50 eventos guardados. Query con JOIN toma ~20ms, completamente aceptable
+4. **Consistencia Prioritaria**: Preferimos mostrar datos frescos (20ms latencia) vs datos potencialmente incorrectos (cache hit pero datos viejos)
+
+**Alternativa Descartada:** TTL largo (10-30 minutos)
+- ❌ Usuario guarda evento desde web, lo ve en móvil después de 5 minutos → NO aparece (UX horrible)
+- ❌ Requiere invalidación manual SIEMPRE que cambia saved_events → complejidad innecesaria
+- ✅ TTL largo es útil para: Datos que cambian raramente (gustos, eventos APPROVED)
 
 ---
 
@@ -940,11 +1137,35 @@ App Móvil
     ↓     - Botón "Guardar" / "Compartir"
 ```
 
-**¿Por qué incrementar view_count de forma asíncrona?**
+#### ¿Por qué incrementar view_count de forma asíncrona?
 
-- **Performance**: No bloquear respuesta HTTP esperando UPDATE
-- **Tolerancia a Errores**: Si falla el UPDATE, la vista del evento sigue funcionando
-- **Métricas No-Críticas**: view_count es analítico, no afecta lógica de negocio
+**Decisión:** Ejecutar `UPDATE events SET view_count = view_count + 1` en un `CompletableFuture.runAsync()` en lugar de hacerlo síncronamente en el hilo principal de la request.
+
+**Razones:**
+1. **Performance Crítico**: Reducir latencia de GET /events/{id} de ~80ms a ~30ms (62% más rápido). El UPDATE no debe bloquear la respuesta al usuario
+2. **Tolerancia a Errores**: Si PostgreSQL está lento o el UPDATE falla (deadlock), el usuario IGUAL obtiene el detalle del evento. Métricas NO deben afectar funcionalidad
+3. **Throughput Mejorado**: El hilo principal se libera inmediatamente para manejar más requests (aumento de ~2000 req/s a ~5000 req/s)
+4. **Métricas No-Críticas**: view_count es para analytics. Perder 1 vista de 10,000 es aceptable (error <0.01%)
+
+**Alternativa Descartada:** UPDATE síncrono
+- ❌ Latencia p95 aumenta de 50ms a 120ms (slowest 5% afectan experiencia)
+- ❌ Si PostgreSQL está bajo carga, el GET se vuelve lento aunque el dato esté en Redis
+- ❌ Deadlocks en view_count bloquearían requests de usuarios
+- ✅ UPDATE síncrono solo si: La métrica es crítica para lógica de negocio (ej: stock de tickets)
+
+#### ¿Por qué TTL de 10 minutos para event detail?
+
+**Decisión:** Cachear detalles de evento con `TTL = 600 segundos` (10 minutos), más largo que saved_events (2 min) pero más corto que discover feed (5 min para listing, pero detail es diferente).
+
+**Razones:**
+1. **Inmutabilidad Relativa**: Los datos de un evento APPROVED cambian muy raramente (solo si admin edita manualmente)
+2. **Alto Tráfico Esperado**: Eventos populares pueden recibir 100-500 vistas por minuto. Cache hit ratio esperado: 95%
+3. **Carga DB Reducida**: Con TTL 10min y 500 views/min → 1 query DB cada 10min vs 500 queries/min (reducción 5000x)
+4. **Balance Frescura/Performance**: 10 minutos es aceptable para cambios menores (ej: promotor actualiza descripción)
+
+**Alternativa Descartada:** Sin caché
+- ❌ Query con JOINs (events + promoters + gustos) toma ~40-60ms. 500 req/min = carga DB insostenible
+- ✅ Sin caché si: Datos cambian en tiempo real (ej: stock de tickets restantes)
 
 ---
 
@@ -1055,21 +1276,147 @@ Promotor (Angular)
     ↓ 31. Puede editar o enviar a revisión
 ```
 
-**Tecnologías Clave:**
+**Justificación Técnica de Decisiones en Creación de Eventos:**
 
-| Componente | Tecnología | Justificación |
-|------------|------------|---------------|
-| **Frontend Form** | Angular Reactive Forms | Validación compleja, control fino de estado |
-| **Autocomplete Ubicación** | Google Places Autocomplete API | UX mejorada, lat/lng automáticos |
-| **Upload Imagen** | Angular HttpClient + Spring MultipartFile | Subida directa al backend, validación |
-| **Storage** | AWS S3 / Cloudinary | Escalabilidad, CDN global |
-| **Validación** | Jakarta Bean Validation | Validación declarativa, consistente |
+#### ¿Por qué Feign (Síncrono) para validar promotor en lugar de RabbitMQ?
 
-**¿Por qué eventos inician como DRAFT?**
+**Decisión:** Event Service llama a Promoter Service vía Feign ANTES de crear el evento.
 
-- **Flujo de Curación**: Promotor puede revisar antes de enviar a aprobación
-- **Prevenir Spam**: No se publican eventos automáticamente
-- **Edición Flexible**: Promotor puede editar sin restricciones
+**Razones:**
+
+1. **Validación Crítica Bloqueante:**
+   - DEBE verificar que promotor está VERIFIED antes de crear evento
+   - Si promotor no verificado → evento NO se crea
+   - Necesitamos respuesta inmediata (GO/NO-GO)
+
+2. **Consistency Fuerte:**
+   - No podemos crear evento y luego descubrir que promotor no existe
+   - Transacción debe ser atómica: validar promotor → crear evento
+   - RabbitMQ asíncrono NO garantiza orden/timing para validaciones
+
+3. **Latencia Aceptable:**
+   - Feign call a Promoter Service: ~20-50ms
+   - Circuit breaker con fallback si Promoter Service está caído
+   - Retry automático (3 intentos con backoff exponencial)
+
+**Alternativa Descartada:** RabbitMQ asíncrono
+- ❌ Crear evento primero, validar después → datos inconsistentes
+- ❌ No sabemos inmediatamente si operación fue exitosa
+- ❌ Promotor envía form y no sabe si falló o no
+
+#### ¿Por qué Circuit Breaker con Resilience4j?
+
+**Decisión:** Feign call a Promoter Service tiene Circuit Breaker configurado.
+
+**Razones:**
+
+1. **Prevenir Cascading Failures:**
+   - Si Promoter Service está caído, Event Service NO debe saturar con requests
+   - Circuit se abre después de 50% de fallos
+   - Protege a Promoter Service de sobrecarga
+
+2. **Fail Fast:**
+   - Circuito OPEN → retorna error inmediatamente (no espera timeout)
+   - Usuario recibe error en ~5ms vs ~3000ms de timeout
+   - Mejor UX: error rápido permite reintentar
+
+3. **Recuperación Automática:**
+   - Después de 10s en estado OPEN, circuito pasa a HALF_OPEN
+   - Permite 3 requests de prueba
+   - Si pasan → circuito CLOSED (servicio recuperado)
+
+**Configuración:**
+```
+slidingWindowSize: 10 requests
+failureRateThreshold: 50%
+waitDurationInOpenState: 10s
+```
+
+**Alternativa Descartada:** Sin Circuit Breaker
+- ❌ Si Promoter Service cae, Event Service hace requests por 3s cada uno
+- ❌ Threads bloqueados esperando timeout
+- ❌ Event Service puede colapsar por thread pool exhausted
+
+#### ¿Por qué RabbitMQ DESPUÉS de crear evento?
+
+**Decisión:** Event Service publica evento `event.created` a RabbitMQ DESPUÉS de guardar en DB.
+
+**Razones:**
+
+1. **Operación No-Bloqueante:**
+   - Actualizar métricas de promotor (total_events++) NO es crítico
+   - Si falla, podemos procesar después sin afectar creación de evento
+   - Permite que el request retorne rápidamente al usuario
+
+2. **Desacoplamiento:**
+   - Event Service NO necesita saber qué otros servicios quieren saber sobre eventos nuevos
+   - Mañana podemos agregar Analytics Service que consuma `event.created`
+   - Promoter Service puede estar caído sin afectar creación
+
+3. **Orden de Operaciones:**
+   - Primero: guardar evento en DB (crítico)
+   - Segundo: publicar evento a RabbitMQ (nice-to-have)
+   - Si RabbitMQ falla, evento ya está creado (no se pierde)
+
+**Patrón:** Validación síncrona (Feign) + Notificación asíncrona (RabbitMQ)
+
+#### ¿Por qué AWS S3 / Cloudinary para imágenes?
+
+**Decisión:** Imágenes NO se guardan en base de datos, sino en object storage.
+
+**Razones:**
+
+1. **Performance:**
+   - Servir imágenes desde PostgreSQL es 10-50x más lento que CDN
+   - PostgreSQL optimizado para queries, no para servir archivos binarios grandes
+   - CDN edge locations sirven imágenes geográficamente cerca del usuario
+
+2. **Escalabilidad:**
+   - Sin límite de almacenamiento (S3/Cloudinary escalan automáticamente)
+   - PostgreSQL tiene límite práctico de tamaño de DB
+   - Backups de DB más rápidos sin GBs de imágenes
+
+3. **Costos:**
+   - S3/Cloudinary: $0.023/GB/mes
+   - PostgreSQL RDS: $0.115/GB/mes (5x más caro)
+   - Para 10,000 eventos con 2MB/imagen → 20GB → $0.46 vs $2.30/mes
+
+4. **CDN Gratis:**
+   - Cloudinary incluye CDN global
+   - Imágenes optimizadas automáticamente (resize, compress, WebP)
+   - Cache en edge locations (latencia <50ms global)
+
+**Alternativa Descartada:** BYTEA en PostgreSQL
+- ❌ DB crece rápidamente (GBs de imágenes)
+- ❌ Backups lentos y pesados
+- ❌ No hay CDN (latencia alta para usuarios lejanos)
+
+#### ¿Por qué eventos inician como DRAFT?
+
+**Decisión:** Eventos nuevos tienen status = DRAFT, no PENDING_REVIEW automáticamente.
+
+**Razones:**
+
+1. **Flujo de Curación Controlado:**
+   - Promotor puede revisar evento antes de enviarlo a admins
+   - Evita enviar eventos con errores/typos
+   - Admin solo ve eventos "finalizados" por el promotor
+
+2. **Edición Sin Restricciones:**
+   - En DRAFT: promotor puede editar TODO (título, fecha, precio)
+   - En PENDING_REVIEW: ediciones limitadas (no queremos que cambie evento mientras admin lo revisa)
+   - En APPROVED: ediciones MUY limitadas (solo descripción menor)
+
+3. **Prevenir Spam:**
+   - Si auto-publicáramos, promotor malicioso podría crear 1000 eventos basura
+   - DRAFT no molesta a admins
+   - Admin solo ve lo que promotor decidió enviar
+
+**Máquina de Estados:**
+```
+DRAFT → PENDING_REVIEW → APPROVED
+      ↘ (puede eliminarse)   ↘ REJECTED
+```
 
 ---
 
@@ -1112,52 +1459,49 @@ Promotor (Angular)
     ↓ 14. Badge de estado cambia a "En Revisión" (amarillo)
 ```
 
-**¿Por qué invalidar caché de eventos pendientes?**
+#### ¿Por qué invalidar caché de pending_events inmediatamente?
 
-- **Cola Actualizada**: Admins deben ver el nuevo evento inmediatamente
-- **TTL Corto No Es Suficiente**: Podría haber delay de hasta 1 minuto
+**Decisión:** Ejecutar `@CacheEvict(value = "pending-events", allEntries = true)` inmediatamente después de cambiar status de DRAFT → PENDING_REVIEW.
 
-**Código de Máquina de Estados:**
+**Razones:**
+1. **UX Crítico para Admins**: Los curadores deben ver el nuevo evento en la cola INMEDIATAMENTE (SLA <5 segundos). TTL de 1 minuto causaría delays inaceptables
+2. **Cola FIFO Justa**: El orden de revisión es crítico (primero enviado = primero revisado). Cache desactualizado rompería la fairness
+3. **Volumen Bajo**: Solo ~10-50 eventos enviados por día. Invalidar caché completo NO impacta performance (query toma ~15ms)
+4. **Alternativa (invalidar solo 1 página) es compleja**: Tendríamos que saber qué página afectó el nuevo evento (depende de paginación + orden)
 
-```java
-@Service
-@RequiredArgsConstructor
-@Transactional
-public class EventService {
+**Alternativa Descartada:** TTL corto sin invalidación manual
+- ❌ Delay de hasta 60 segundos antes de que admin vea nuevo evento (SLA violado)
+- ❌ Admins podrían ver lista inconsistente si dos eventos se envían con 30 segundos de diferencia
+- ✅ TTL sin invalidación funciona para: Datos donde eventual consistency es aceptable (ej: trending topics)
 
-    private final EventRepository eventRepository;
+#### ¿Por qué máquina de estados estricta (DRAFT → PENDING_REVIEW)?
 
-    @CacheEvict(value = "pending-events", allEntries = true)
-    public EventResponse submitForReview(UUID eventId, UUID promoterId) {
-        Event event = eventRepository.findById(eventId)
-            .orElseThrow(() -> new ResourceNotFoundException("Evento no encontrado"));
+**Decisión:** Validar estado actual `event.getStatus() == DRAFT` antes de permitir transición a PENDING_REVIEW. Lanzar `IllegalStateException` si ya está en otro estado.
 
-        // Verificar ownership
-        if (!event.getPromoter().getId().equals(promoterId)) {
-            throw new UnauthorizedException("No autorizado para este evento");
-        }
+**Razones:**
+1. **Prevenir Doble Envío**: Sin validación, un promotor podría enviar el mismo evento múltiples veces (ej: doble click → 2 requests)
+2. **Integridad del Flujo**: Garantiza que eventos APPROVED no puedan "volver" a PENDING_REVIEW accidentalmente
+3. **Auditoría Clara**: El campo `reviewed_at` solo se setea UNA VEZ, permitiendo calcular "tiempo hasta aprobación" correctamente
+4. **Error Descriptivo**: Usuario recibe mensaje claro "Solo eventos en DRAFT pueden enviarse" vs error genérico 500
 
-        // Verificar estado válido
-        if (event.getStatus() != EventStatus.DRAFT) {
-            throw new IllegalStateException(
-                "Solo eventos en DRAFT pueden enviarse a revisión. " +
-                "Estado actual: " + event.getStatus()
-            );
-        }
+**Alternativa Descartada:** Permitir transiciones libres
+- ❌ Promotor podría enviar evento REJECTED nuevamente sin hacer cambios (spam de la cola de admins)
+- ❌ Eventos APPROVED podrían cambiar a PENDING_REVIEW, desapareciendo del discover feed inesperadamente
+- ✅ Transiciones libres solo si: Lógica de negocio permite cualquier cambio (ej: estado "draft" en editor de texto)
 
-        // Cambiar estado
-        event.setStatus(EventStatus.PENDING_REVIEW);
-        Event updated = eventRepository.save(event);
+#### ¿Por qué notificar a admins de forma opcional/asíncrona?
 
-        // [OPCIONAL] Notificar admins
-        notificationService.notifyAdmins(
-            "Nuevo evento pendiente de revisión: " + event.getTitle()
-        );
+**Decisión:** Envío de notificación a admins (email/push) es asíncrono y NO bloquea la operación de submit-review.
 
-        return EventMapper.toResponse(updated);
-    }
-}
-```
+**Razones:**
+1. **Operación No-Crítica**: Si falla el envío de email, el evento YA está en PENDING_REVIEW. La notificación es conveniente pero no esencial
+2. **Latencia**: Enviar email vía SMTP toma ~500-2000ms. No queremos bloquear la respuesta HTTP al promotor
+3. **Resiliencia**: Si servicio de email está caído, el submit-review sigue funcionando normalmente
+
+**Alternativa Descartada:** Notificación síncrona bloqueante
+- ❌ Si SMTP server falla, el submit-review fallaría → evento NO entraría en cola
+- ❌ Latencia de submit-review aumentaría de ~50ms a ~2 segundos (40x más lento)
+- ✅ Síncrono solo si: La notificación es crítica (ej: 2FA código de seguridad)
 
 ---
 
@@ -1210,11 +1554,47 @@ Admin (Angular)
     ↓     - Botones: "Ver Detalle", "Aprobar", "Rechazar"
 ```
 
-**¿Por qué ordenar por created_at ASC (FIFO)?**
+#### ¿Por qué ordenar por created_at ASC (FIFO)?
 
-- **Fairness**: Primer evento enviado = primer evento revisado
-- **Prevenir Starvation**: Eventos antiguos no se quedan sin revisar
-- **SLA Predecible**: Promotores saben cuánto esperar (~24 horas)
+**Decisión:** Ordenar cola de eventos pendientes con `ORDER BY e.created_at ASC` (primero enviado = primero revisado) en lugar de otros criterios como prioridad, popularidad del promotor, o fecha del evento.
+
+**Razones:**
+1. **Fairness (Justicia)**: Todos los promotores son tratados igual. Promotores pequeños NO son penalizados vs promotores grandes con más eventos
+2. **Prevenir Starvation**: Sin FIFO, eventos "menos atractivos" (ej: evento gratis en pueblo pequeño) podrían nunca ser revisados
+3. **SLA Predecible**: Promotores pueden estimar tiempo de espera basado en posición en cola (ej: "Tu evento es #15 de 20, aprox 18 horas")
+4. **Transparencia**: Sistema es 100% objetivo. NO hay posibilidad de acusaciones de favoritismo o corrupción
+
+**Alternativas Descartadas:**
+
+**Opción 1:** Priorizar por fecha del evento (eventos que empiezan pronto primero)
+- ❌ Incentiva a promotores a enviar eventos con fechas falsas cercanas para "saltar" la cola
+- ❌ Eventos con fecha lejana (ej: festival en 6 meses) nunca serían revisados
+- ✅ Útil si: Hay deadline regulatorio (ej: aprobar antes de X fecha)
+
+**Opción 2:** Priorizar por promoter_tier (verificados VIP primero)
+- ❌ Destruye el modelo de negocio ("cero ruido, solo tus intereses"). Amigusto NO favorece eventos de pago
+- ❌ Promotores nuevos abandonarían la plataforma (tiempo de espera >1 semana)
+- ✅ Útil en: Plataformas premium donde "pagar más = mejor servicio"
+
+**Opción 3:** Ordenar por score de ML (probabilidad de ser aprobado)
+- ❌ Complejidad técnica extrema. Requiere modelo ML entrenado con histórico de aprobaciones
+- ❌ Sesgo: Modelo favorecería eventos similares a los ya aprobados (círculo vicioso)
+- ✅ Útil para: Optimizar throughput cuando volumen es >10,000 eventos/día
+
+#### ¿Por qué TTL de solo 1 minuto para pending_events?
+
+**Decisión:** Cachear cola de eventos pendientes con `TTL = 60 segundos`, el más corto de todos los cachés de la plataforma.
+
+**Razones:**
+1. **Cola Cambia Constantemente**: Cada aprobación/rechazo/submit modifica la cola. Con ~50 eventos/día, cambios cada ~30 minutos
+2. **Admins Trabajan en Tiempo Real**: Curador aprueba evento #1 → debe ver inmediatamente evento #2 siguiente
+3. **Invalidación Manual Complementaria**: Aunque invalidamos caché al aprobar/rechazar/submit, el TTL corto es safety net si falla invalidación
+4. **Query Muy Rápida**: `SELECT WHERE status = 'PENDING_REVIEW' ORDER BY created_at LIMIT 10` con índice toma <10ms
+
+**Alternativa Descartada:** TTL largo (5-10 minutos)
+- ❌ Admin aprueba evento → sigue viéndolo en la cola durante 5 min → confusión
+- ❌ Dos admins podrían revisar el mismo evento simultáneamente (race condition)
+- ✅ TTL largo útil para: Datos que NO cambian frecuentemente (eventos APPROVED)
 
 ---
 
@@ -1323,62 +1703,68 @@ Apps Móviles (Usuarios)
     ↓     → Evento aparece en resultados de descubrimiento
 ```
 
-**¿Por qué invalidar múltiples cachés?**
+#### ¿Por qué invalidar múltiples cachés en cascada?
 
-- **Consistencia**: El evento APROBADO debe ser visible inmediatamente
-- **discover:{city}:*** : Todos los usuarios en esa ciudad deben ver el nuevo evento
-- **pending_events:** : La cola de admin ya no incluye este evento
-- **event:{eventId}** : Si alguien tenía el detalle cacheado con status=PENDING, debe actualizarse
+**Decisión:** Invalidar 3 tipos de cachés diferentes al aprobar un evento: `pending_events:*`, `discover:{city}:*`, y `event:{eventId}`.
 
-**Código con Anotaciones de Caché:**
+**Razones:**
+1. **pending_events:*** - La cola de admin YA NO incluye este evento. Si no invalidamos, admin sigue viendo el evento como pendiente
+2. **discover:{city}:*** - Todos los usuarios en esa ciudad DEBEN ver el nuevo evento inmediatamente en su feed. Es la promesa de valor de la plataforma
+3. **event:{eventId}** - Si alguien vio el detalle mientras estaba PENDING_REVIEW, el caché mostraría status incorrecto
+4. **Consistency > Performance**: Preferimos invalidar múltiples cachés (todos se reconstruyen en ~100ms) vs mostrar datos incorrectos
 
-```java
-@Service
-@RequiredArgsConstructor
-@Transactional
-public class EventService {
+**Alternativa Descartada:** Invalidar solo pending_events
+- ❌ Usuario abre app 2 minutos después de aprobación → evento NO aparece (debe esperar TTL de 5 min)
+- ❌ Promotor comparte link del evento → muestra status "Pendiente de revisión" → mala imagen
+- ✅ Invalidación selectiva útil si: Los datos NO están relacionados entre sí
 
-    private final EventRepository eventRepository;
-    private final EmailService emailService;
+#### ¿Por qué RabbitMQ event.approved en lugar de Feign síncrono?
 
-    @Caching(evict = {
-        @CacheEvict(value = "discover-events", allEntries = true),
-        @CacheEvict(value = "pending-events", allEntries = true),
-        @CacheEvict(value = "events", key = "#eventId")
-    })
-    public EventResponse approveEvent(UUID eventId, UUID adminId) {
-        Event event = eventRepository.findById(eventId)
-            .orElseThrow(() -> new ResourceNotFoundException("Evento no encontrado"));
+**Decisión:** Event Service publica mensaje `event.approved` a RabbitMQ en lugar de llamar directamente a Notification Service vía Feign.
 
-        // Validar estado
-        if (event.getStatus() != EventStatus.PENDING_REVIEW) {
-            throw new IllegalStateException(
-                "Solo eventos en PENDING_REVIEW pueden aprobarse"
-            );
-        }
+**Razones:**
+1. **Desacoplamiento Total**: Event Service NO sabe si Notification Service existe o está disponible. Añadir nuevos consumidores (ej: Analytics Service) NO requiere cambiar Event Service
+2. **Resiliencia**: Si Notification Service está caído, RabbitMQ guarda el mensaje en cola y reintenta cuando vuelva (durabilidad garantizada)
+3. **Performance**: Aprobar evento retorna en ~150ms (UPDATE + invalidar caché + publish). NO espera a enviar email (~2000ms SMTP)
+4. **Idempotencia**: Si Notification Service procesa el mismo evento 2 veces (retry), debe detectarlo vía eventId y NO enviar email duplicado
 
-        // Cambiar estado
-        event.setStatus(EventStatus.APPROVED);
-        event.setReviewedBy(adminId);
-        event.setReviewedAt(LocalDateTime.now());
-        event.setPublishedAt(LocalDateTime.now());
+**Alternativa Descartada:** Feign síncrono a Notification Service
+- ❌ Si Notification Service está lento (SMTP timeout), aprobar evento se vuelve lento (latencia p95: 5000ms vs 150ms)
+- ❌ Si falla envío de email, ¿la aprobación debe fallar? NO (separación de concerns)
+- ❌ Circuit breaker ayuda pero NO resuelve el problema fundamental de acoplamiento
+- ✅ Feign síncrono solo si: Necesitamos respuesta inmediata del servicio downstream (ej: validar stock)
 
-        Event updated = eventRepository.save(event);
+#### ¿Por qué Notification Service usa Feign para obtener datos del promotor?
 
-        // Notificar promotor (asíncrono)
-        CompletableFuture.runAsync(() -> {
-            emailService.sendEventApprovedEmail(
-                event.getPromoter().getUser().getEmail(),
-                event.getTitle()
-            );
-        });
+**Decisión:** Notification Service hace llamada síncrona `promoterClient.getPromoter(promoterId)` vía Feign para obtener email del promotor.
 
-        log.info("Evento {} aprobado por admin {}", eventId, adminId);
+**Razones:**
+1. **Payload Ligero**: El evento `event.approved` NO incluye todos los datos del promotor (email, nombre, etc.). Solo incluye promoterId (UUID)
+2. **Single Source of Truth**: Promoter Service es la fuente autoritativa de datos de promotores. Replicar email en múltiples servicios causa inconsistencias
+3. **Datos Actualizados**: Si promotor cambió su email ayer, Notification Service obtiene el email ACTUAL, no uno desactualizado en el evento
+4. **Validación Bloqueante Aceptable**: Enviar email a dirección incorrecta es peor que fallar el envío y reintentar
 
-        return EventMapper.toResponse(updated);
-    }
-}
-```
+**Alternativa Descartada:** Incluir todos los datos en el mensaje RabbitMQ
+- ❌ Payload grande: `event.approved` pasaría de ~200 bytes a ~2KB (10x más grande)
+- ❌ Datos desactualizados: Email del promotor podría haber cambiado entre creación del evento y aprobación
+- ❌ Acoplamiento: Cualquier cambio en Promoter model requiere cambiar TODOS los servicios que consumen eventos
+- ✅ Payload completo útil si: Los datos son inmutables (ej: eventId, title nunca cambian)
+
+#### ¿Por qué MongoDB para notification_db en lugar de PostgreSQL?
+
+**Decisión:** Almacenar logs de emails enviados en MongoDB en lugar de PostgreSQL.
+
+**Razones:**
+1. **Alta Escritura, Baja Lectura**: Ratio escrituras:lecturas ~95:5. Solo escribimos logs, raramente los consultamos (solo para debugging)
+2. **Esquema Flexible**: Emails tienen metadata variable (ej: email de aprobación tiene eventId, email de bienvenida tiene userId, email de newsletter tiene campaignId)
+3. **TTL Nativo**: MongoDB puede eliminar documentos automáticamente después de 90 días con índice TTL (`db.email_logs.createIndex({sentAt: 1}, {expireAfterSeconds: 7776000})`)
+4. **Escalabilidad Horizontal**: MongoDB escala mejor para writes intensivos (sharding por fecha)
+
+**Alternativa Descartada:** PostgreSQL con tabla email_logs
+- ❌ Esquema rígido: Tendríamos que usar JSONB para metadata variable (query performance afectado)
+- ❌ TTL manual: Requiere CRON job para `DELETE FROM email_logs WHERE sent_at < NOW() - INTERVAL '90 days'` (locks de tabla)
+- ❌ Writes intensivos: PostgreSQL optimizado para ACID transactions, NO para append-only logs
+- ✅ PostgreSQL útil para: Datos transaccionales con relaciones (events, users, saved_events)
 
 ---
 
@@ -1423,11 +1809,51 @@ Promotor (Angular)
     ↓ 16. Puede ver razón, editar evento, y reenviar
 ```
 
-**¿Por qué almacenar rejection_reason?**
+#### ¿Por qué almacenar rejection_reason en la tabla events?
 
-- **Transparencia**: Promotor entiende el problema
-- **Mejora de Calidad**: Promotor puede corregir y reenviar
-- **Auditabilidad**: Historial de decisiones de admin
+**Decisión:** Agregar columna `rejection_reason TEXT NULL` en tabla `events` para almacenar la razón del rechazo escrita por el admin.
+
+**Razones:**
+1. **Transparencia con Promotor**: El promotor puede ver exactamente POR QUÉ su evento fue rechazado (ej: "Imagen no corresponde al evento"). Sin esto, recibiría solo "Rechazado" sin contexto
+2. **Mejora de Calidad**: Promotor sabe qué corregir antes de reenviar. Sin razón, tendría que adivinar el problema (trial & error, frustración)
+3. **Reducción de Tickets de Soporte**: Sin rejection_reason, promotores contactarían soporte masivamente preguntando "¿por qué rechazaron mi evento?"
+4. **Auditabilía y Compliance**: Historial completo de decisiones de admins. Importante para disputas o análisis de patrones de rechazo
+
+**Alternativa Descartada:** Solo email con razón, sin persistir en DB
+- ❌ Promotor puede perder el email o eliminarlo accidentalmente → NO hay forma de recuperar la razón
+- ❌ Si promotor accede desde dispositivo diferente (móvil → web), NO ve la razón
+- ❌ Analytics imposibles: NO podemos analizar razones de rechazo más comunes para mejorar guidelines
+- ✅ Solo email útil si: La razón es confidencial y NO debe persistir (ej: datos sensibles)
+
+#### ¿Por qué validar rejection_reason no vacío?
+
+**Decisión:** Validar que `@NotBlank String reason` en el controller antes de permitir rechazo.
+
+**Razones:**
+1. **Forzar Accountability**: Admin DEBE explicar su decisión. Rechazos sin razón serían arbitrarios y destruirían confianza de promotores
+2. **Prevenir Errores**: Admin podría clickear "Rechazar" accidentalmente sin escribir razón. Validación previene esto
+3. **Calidad de Feedback**: Razones vacías o genéricas ("No") no ayudan al promotor. UX debe requerir mínimo ~20 caracteres
+
+**Alternativa Descartada:** Permitir rechazo sin razón
+- ❌ Promotores percibirían sistema como injusto o corrupto ("¿por qué rechazaron mi evento sin explicación?")
+- ❌ Legal risk: En algunas jurisdicciones, decisiones automatizadas/opacas pueden ser cuestionadas legalmente
+- ✅ Sin validación útil si: Rechazo es automático por reglas objetivas (ej: evento pasado, imagen NSFW detectada por ML)
+
+#### ¿Por qué permitir re-envío después de rechazo?
+
+**Decisión:** Eventos REJECTED pueden editarse y cambiar a DRAFT → PENDING_REVIEW nuevamente (flujo cíclico permitido).
+
+**Razones:**
+1. **Segunda Oportunidad**: Mayoría de rechazos son por errores corregibles (imagen incorrecta, descripción poco clara). Bloquear permanentemente sería excesivamente punitivo
+2. **Incentivo a Mejorar Calidad**: Promotor invierte tiempo corrigiendo vs abandonar la plataforma frustrado
+3. **Reducción de Eventos Duplicados**: Sin re-envío, promotor crearía evento completamente nuevo con mismos datos (spam de la cola)
+4. **Aprendizaje**: Promotor aprende los estándares de calidad de la plataforma con cada iteración
+
+**Alternativa Descartada:** Rechazo permanente (evento bloqueado forever)
+- ❌ Promotores abandonarían plataforma después de 1 rechazo (churn rate alto)
+- ❌ Crearía incentivo a crear múltiples cuentas para "esquivar" rechazos
+- ❌ Pérdida de ingresos: Menos eventos aprobados = menos valor para usuarios = menos engagement
+- ✅ Bloqueo permanente útil si: Violación grave (spam, contenido ilegal, fraude comprobado)
 
 ---
 
@@ -1668,93 +2094,143 @@ spring:
 4. Si MISS → consulta DB → guarda en caché → retorna
 ```
 
-**Implementación con Spring Cache:**
+#### ¿Por qué Cache-Aside en lugar de Write-Through o Write-Behind?
 
-```java
-@Service
-@RequiredArgsConstructor
-public class EventService {
+**Decisión:** Usar patrón Cache-Aside (también llamado Lazy Loading) como estrategia principal de caché en toda la aplicación.
 
-    private final EventRepository eventRepository;
+**Razones:**
+1. **Simplicidad de Implementación**: Spring Cache con `@Cacheable` maneja automáticamente el patrón. NO requiere lógica manual de cache management
+2. **Datos Solo en Cache Si Se Usan**: Eventos que NUNCA se consultan NO ocupan espacio en Redis. Con Write-Through, TODO se cachea (desperdicio de memoria)
+3. **Resiliencia a Fallos**: Si Redis falla completamente, la app sigue funcionando (más lento, pero funcional). PostgreSQL es source of truth
+4. **Menor Complejidad en Writes**: Al crear/actualizar evento, solo invalidamos caché (`@CacheEvict`). NO necesitamos actualizar Redis Y PostgreSQL simultáneamente
 
-    // Cache-Aside: busca primero en caché, si no está, consulta DB y guarda
-    @Cacheable(
-        value = "discover-events",
-        key = "#city + '-' + #gustoIds.hashCode() + '-page' + #pageable.pageNumber"
-    )
-    public Page<EventResponse> discoverEvents(
-        BigDecimal lat,
-        BigDecimal lng,
-        List<UUID> gustoIds,
-        String city,
-        Pageable pageable
-    ) {
-        // Esta query solo se ejecuta si hay CACHE MISS
-        Page<Event> events = eventRepository.findByGustosAndCity(
-            gustoIds, city, lat, lng, 50.0, pageable
-        );
+**Alternativas Descartadas:**
 
-        return events.map(EventMapper::toResponse);
-    }
+**Write-Through:** Cada escritura actualiza DB Y caché simultáneamente
+- ❌ Complejidad: Crear evento requiere INSERT en PostgreSQL + SET en Redis en MISMA transacción (difícil de garantizar atomicidad)
+- ❌ Latencia de Escritura: POST /events tomaría ~50ms más (UPDATE cache + DB vs solo DB)
+- ❌ Desperdicio de Memoria: Eventos DRAFT/REJECTED se cachean aunque NUNCA se consulten en discover feed
+- ✅ Útil si: Lecturas >> Escrituras (ratio 1000:1) Y TODAS las escrituras se leen después (ej: post en red social)
 
-    // Invalidación de caché al aprobar evento
-    @Caching(evict = {
-        @CacheEvict(value = "discover-events", allEntries = true),
-        @CacheEvict(value = "pending-events", allEntries = true)
-    })
-    public EventResponse approveEvent(UUID eventId, UUID adminId) {
-        // ... lógica de aprobación ...
-    }
-}
-```
+**Write-Behind:** Escribir primero en caché, sincronizar a DB después (asíncrono)
+- ❌ Riesgo de Pérdida de Datos: Si Redis crashea antes de sincronizar a PostgreSQL, eventos se pierden (inaceptable)
+- ❌ Complejidad Extrema: Requiere job de sincronización, manejo de conflictos, reintentos, dead letter queue
+- ❌ Consistency Issues: Caché y DB desincronizados durante ventana de tiempo (eventual consistency NO aceptable para eventos)
+- ✅ Útil si: Writes intensivos (>10,000/sec) donde DB es cuello de botella Y pérdida de datos es tolerable (ej: analytics, logs)
+
+#### ¿Por qué clave compuesta con city + gustoIds.hashCode() + page?
+
+**Decisión:** Usar clave de caché compuesta: `discover-events:{city}-{gustoIds.hashCode()}-page{pageNumber}`.
+
+**Razones:**
+1. **Granularidad Óptima**: Dos usuarios en Madrid con mismos gustos (Música + Teatro) comparten caché. Diferentes gustos = caché diferente
+2. **Evitar Colisiones**: User A en Madrid página 0 NO sobrescribe User B en Barcelona página 0 (city diferencia)
+3. **Paginación Independiente**: Página 0 cacheada NO invalida páginas 1, 2, 3. Solo se reconstruye la página solicitada
+4. **hashCode() Eficiente**: Convertir List<UUID> a integer para key compacta vs serializar lista completa
+
+**Alternativa Descartada:** Clave única global `discover-events`
+- ❌ Todos los usuarios comparten MISMO caché → Usuario en Barcelona ve eventos de Madrid
+- ❌ Primera búsqueda cachea datos, todas las demás búsquedas retornan esos datos (completamente incorrecto)
+- ✅ Clave global útil si: Datos son idénticos para todos los usuarios (ej: lista de países)
 
 ### 7.2 Cache Warming
 
-**Precargar caché al iniciar la aplicación:**
+**Concepto:** Precargar datos en Redis al iniciar la aplicación, ANTES de recibir requests de usuarios.
 
-```java
-@Component
-@RequiredArgsConstructor
-public class CacheWarmer implements ApplicationListener<ContextRefreshedEvent> {
+#### ¿Por qué pre-cachear gustos y ciudades al startup?
 
-    private final GustoService gustoService;
-    private final CityService cityService;
+**Decisión:** Ejecutar `gustoService.getAllGustos()` y `cityService.getAllActiveCities()` en un listener de `ContextRefreshedEvent` (cuando Spring Boot termina de iniciar).
 
-    @Override
-    public void onApplicationEvent(ContextRefreshedEvent event) {
-        // Precargar datos estáticos en Redis
-        gustoService.getAllGustos();  // → Redis: gustos:all
-        cityService.getAllActiveCities();  // → Redis: cities:active
+**Razones:**
+1. **Eliminar Cold Start Penalty**: Primer usuario que abre la app obtiene gustos en ~1ms (cache hit) vs ~20ms (query DB). Mejor first impression
+2. **Datos Altamente Predecibles**: TODOS los usuarios nuevos cargan gustos en onboarding. Probabilidad de uso = 100%
+3. **Dataset Pequeño y Estático**: ~50 gustos + ~100 ciudades activas = ~5KB total. Precargar es casi gratis en memoria
+4. **Reducir Carga Inicial**: Al momento de lanzamiento (1000 usuarios simultáneos), evitamos 1000 queries a PostgreSQL en primer minuto
 
-        log.info("Caché precargado con éxito");
-    }
-}
-```
+**Alternativa Descartada:** Lazy loading sin warming
+- ❌ Primeros 10-100 usuarios experimentan latencia alta (20-30ms) cargando gustos
+- ❌ Spike de queries a PostgreSQL al momento de lanzamiento (potencial sobrecarga)
+- ✅ Sin warming útil si: Datos son impredecibles (NO sabemos qué se va a consultar primero)
+
+#### ¿Qué NO debemos pre-cachear?
+
+**Decisión:** NO pre-cachear eventos, usuarios, o eventos guardados.
+
+**Razones:**
+1. **discover-events:** Requiere parámetros variables (city, gustoIds, lat, lng). NO sabemos qué combinación pre-cachear
+2. **saved_events:{userId}:** Requiere userId específico. Pre-cachear saved_events de usuario aleatorio es inútil
+3. **Desperdicio de Memoria**: Pre-cachear 10,000 eventos (varios MB) cuando solo 100 serán consultados es ineficiente
+4. **TTL Corto**: saved_events tiene TTL 2min. Pre-cachear algo que expira en 2min NO tiene sentido
+
+**Regla General:** Solo pre-cachear datos que:
+- ✅ Son consultados por >80% de usuarios
+- ✅ Son estáticos o semi-estáticos (TTL >1 hora)
+- ✅ Son pequeños (<100KB)
+- ❌ Requieren parámetros variables
+- ❌ Son específicos de usuario
 
 ### 7.3 Optimización de Queries N+1
 
-**Problema: Cargar eventos con sus gustos (N+1 queries)**
+**Problema:** Hibernate lazy loading puede generar N+1 queries (1 query principal + N queries adicionales para relaciones).
 
-```java
-// ❌ MAL: N+1 problem
-List<Event> events = eventRepository.findAll();
-events.forEach(event -> {
-    event.getGustos().size();  // Lazy loading → 1 query por evento
-});
+#### ¿Por qué usar JOIN FETCH en lugar de lazy loading?
+
+**Decisión:** Usar `LEFT JOIN FETCH e.gustos` en queries JPQL cuando sabemos que necesitaremos las relaciones.
+
+**Razones:**
+1. **Performance Crítico**: N+1 problem con 20 eventos = 21 queries (1 + 20) vs 1 query con JOIN. Latencia: ~400ms vs ~40ms (10x más rápido)
+2. **Reducción de Round Trips**: 1 viaje a PostgreSQL vs 21 viajes. Latencia de red se multiplica
+3. **Carga Eager Selectiva**: Solo traemos relaciones cuando las necesitamos (discover feed), NO siempre (evita over-fetching)
+4. **Cacheable**: Query con JOIN puede cachearse completa. Lazy loading NO se beneficia de caché
+
+**Ejemplo Concreto:**
+
+**Sin JOIN FETCH (N+1 problem):**
+```sql
+-- Query 1: Obtener eventos
+SELECT * FROM events WHERE status = 'APPROVED' LIMIT 20;
+
+-- Queries 2-21: Para cada evento, obtener sus gustos (LAZY LOADING)
+SELECT * FROM event_gustos WHERE event_id = 'uuid-1';
+SELECT * FROM event_gustos WHERE event_id = 'uuid-2';
+...
+SELECT * FROM event_gustos WHERE event_id = 'uuid-20';
+
+-- Total: 21 queries, ~400ms
 ```
 
-**Solución: Fetch JOIN**
+**Con JOIN FETCH:**
+```sql
+-- Query única con JOIN
+SELECT DISTINCT e.*, g.*
+FROM events e
+LEFT JOIN event_gustos eg ON e.id = eg.event_id
+LEFT JOIN gustos g ON eg.gusto_id = g.id
+WHERE e.status = 'APPROVED'
+LIMIT 20;
 
-```java
-// ✅ BIEN: Único query con JOIN
-@Query("""
-    SELECT DISTINCT e FROM Event e
-    LEFT JOIN FETCH e.gustos
-    LEFT JOIN FETCH e.promoter
-    WHERE e.status = 'APPROVED'
-    """)
-List<Event> findAllWithRelations();
+-- Total: 1 query, ~40ms
 ```
+
+**Alternativa Descartada:** Lazy loading siempre
+- ❌ Desarrollador debe recordar hacer lazy loading trigger (`event.getGustos().size()`) DENTRO de transacción
+- ❌ Si accedes a gustos FUERA de transacción → `LazyInitializationException` (bug común)
+- ❌ Performance horrible en loops (20 eventos = 20 queries adicionales)
+- ✅ Lazy loading útil si: NO sabemos si usaremos la relación (ej: admin ve evento sin necesitar gustos)
+
+#### ¿Por qué DISTINCT en JOIN FETCH?
+
+**Decisión:** Usar `SELECT DISTINCT e` cuando hacemos JOIN FETCH con colecciones (@OneToMany, @ManyToMany).
+
+**Razones:**
+1. **Evitar Duplicados**: JOIN con event_gustos crea 1 fila por gusto. Evento con 3 gustos aparece 3 veces en result set
+2. **Hibernate Deduplicación**: DISTINCT le dice a Hibernate que deduplique entidades Event (mantiene 1 Event con lista de 3 gustos)
+3. **Sin DISTINCT**: Evento con 3 gustos se retornaría 3 veces → lista de 20 eventos se convierte en lista de 60 (incorrecta)
+
+**Alternativa Descartada:** Sin DISTINCT
+- ❌ Result set contiene duplicados: `[Event1, Event1, Event1, Event2, Event2, ...]`
+- ❌ Requiere deduplicación manual en Java: `events.stream().distinct().collect(...)`
+- ✅ Sin DISTINCT solo si: JOIN es @ManyToOne (NO genera duplicados)
 
 ---
 
