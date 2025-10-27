@@ -450,7 +450,11 @@ export const environment = {
 ### Arquitectura
 - **ARQUITECTURA_MICROSERVICIOS.md**: 🔴 Arquitectura completa de microservicios (PRINCIPAL)
 - **MICROSERVICIOS_RESUMEN.md**: Resumen ejecutivo de microservicios
-- **ARQUITECTURA_FUNCIONAL_DETALLADA.md**: Flujos funcionales detallados con arquitectura de microservicios
+- **ARQUITECTURA_FUNCIONAL_DETALLADA.md**: 🎯 Flujos funcionales con **justificaciones técnicas detalladas**
+  - Explica el "por qué" y "para qué" de cada decisión técnica
+  - Compara alternativas (PostgreSQL vs MongoDB, Feign vs RabbitMQ, etc.)
+  - Incluye métricas y trade-offs (10x más rápido, TTL específicos, etc.)
+  - Formato: Decisión → Razones → Alternativas Descartadas (❌/✅)
 
 ### Planificación
 - **PLAN_TECNICO_AMIGUSTO.md**: Plan de implementación por fases
@@ -462,6 +466,93 @@ export const environment = {
 
 ### Visualización
 - **DIAGRAMAS.md**: Diagramas de arquitectura (Mermaid)
+
+## Filosofía de Documentación
+
+La documentación de Amigusto sigue un enfoque centrado en **justificaciones técnicas** en lugar de solo mostrar código. Cada decisión arquitectónica debe explicar:
+
+### Formato Estándar para Justificaciones
+
+```markdown
+#### ¿Por qué [Decisión Técnica]?
+
+**Decisión:** [Descripción clara de qué se decidió usar/implementar]
+
+**Razones:**
+1. [Razón principal con métricas concretas]
+2. [Razón secundaria con comparación]
+3. [Razón terciaria con trade-off explicado]
+4. [Razón adicional si es necesario]
+
+**Alternativa Descartada:** [Opción NO elegida]
+- ❌ [Por qué NO funciona en nuestro caso]
+- ❌ [Desventaja o limitación]
+- ❌ [Complejidad o costo innecesario]
+- ✅ [Cuándo SÍ sería apropiado usarla]
+```
+
+### Principios de Documentación
+
+1. **Explicar el "Por Qué"**: Más importante que el "Cómo". El código muestra el cómo, la documentación debe explicar por qué.
+
+2. **Comparar Alternativas**: Siempre mencionar qué otras opciones consideramos y por qué fueron descartadas (PostgreSQL vs MongoDB, Feign vs RabbitMQ, etc.).
+
+3. **Incluir Métricas**: Usar números concretos cuando sea posible:
+   - Latencia: "~40ms vs ~400ms (10x más rápido)"
+   - TTL: "5 minutos para discover-events, 2 minutos para saved-events"
+   - Reducción: "1000 queries/día → 1 query/día (reducción 1000x)"
+
+4. **Mostrar Trade-offs**: Ninguna decisión es perfecta. Explicar qué sacrificamos:
+   - "Consistency > Performance en este caso porque..."
+   - "Simplicidad > Features porque el volumen esperado es..."
+
+5. **Contexto de Aplicabilidad**: Indicar cuándo la alternativa descartada SÍ sería apropiada:
+   - "✅ Write-Behind útil si: Writes >10,000/sec Y pérdida de datos tolerable"
+
+### Ejemplos de Buena Documentación
+
+**❌ MAL** (solo muestra código sin explicar):
+```markdown
+Usamos Redis para caché:
+```java
+@Cacheable(value = "events")
+public Event getEvent(UUID id) { ... }
+```
+```
+
+**✅ BIEN** (explica decisión con alternativas):
+```markdown
+#### ¿Por qué cachear gustos en Redis con TTL 24 horas?
+
+**Decisión:** Cachear lista completa de gustos con TTL = 86400 segundos.
+
+**Razones:**
+1. **Datos Semi-Estáticos**: Se modifican ~1-2 veces/mes
+2. **Alto Tráfico Repetitivo**: 1000 registros/día → reducción 1000x en queries
+3. **Dataset Pequeño**: ~50 gustos = ~2KB (casi gratis en memoria)
+
+**Alternativa Descartada:** Sin caché
+- ❌ PostgreSQL hit innecesario para datos que NO cambian
+- ❌ Latencia acumulada: ~20ms por query vs ~1ms con caché
+- ✅ Sin caché útil si: Datos cambian frecuentemente
+```
+
+### Cuándo Incluir Código vs Justificaciones
+
+**Incluir Código en:**
+- `EJEMPLOS_CODIGO.md`: Implementaciones completas de Controllers, Services, Feign clients
+- `README.md`: Comandos de setup y ejecución
+- Comentarios en código fuente: Lógica compleja específica
+
+**Incluir Justificaciones en:**
+- `ARQUITECTURA_FUNCIONAL_DETALLADA.md`: Por qué elegimos cada tecnología/patrón
+- `ARQUITECTURA_MICROSERVICIOS.md`: Decisiones de diseño arquitectónico
+- `CLAUDE.md`: Guidelines para futuras decisiones
+
+**Evitar:**
+- Bloques grandes de código (>15 líneas) en documentos de arquitectura
+- Justificaciones vacías ("porque es más rápido") sin métricas
+- Documentación que solo repite lo que el código ya dice
 
 ## Patrones Comunes a Seguir
 
@@ -508,6 +599,66 @@ export const environment = {
 4. Crear componente con Reactive Forms si es necesario
 5. Agregar ruta en `app.routes.ts`
 6. Agregar guard si requiere autenticación
+
+### Documentar Decisiones Técnicas (IMPORTANTE)
+
+Cuando implementes una **decisión técnica significativa**, documéntala en `ARQUITECTURA_FUNCIONAL_DETALLADA.md`:
+
+**¿Qué considerar "decisión técnica significativa"?**
+- Elegir entre tecnologías (PostgreSQL vs MongoDB, Feign vs RabbitMQ)
+- Configurar TTL de caché (¿por qué 5 min y no 10 min?)
+- Patron arquitectónico (Cache-Aside vs Write-Through)
+- Validaciones de negocio (¿por qué validar en backend Y frontend?)
+- Estructura de datos (¿por qué DELETE+INSERT vs UPSERT?)
+
+**Proceso:**
+1. **Implementa** el código primero
+2. **Documenta** la justificación usando el formato estándar:
+   ```markdown
+   #### ¿Por qué [tu decisión]?
+
+   **Decisión:** [Qué decidiste]
+
+   **Razones:**
+   1. [Con métricas: "10x más rápido", "reducción 1000x"]
+   2. [Con comparación con alternativa]
+   3. [Con trade-off explicado]
+
+   **Alternativa Descartada:** [Qué NO elegiste]
+   - ❌ [Por qué NO en nuestro caso]
+   - ❌ [Limitación o complejidad]
+   - ✅ [Cuándo SÍ usarla: "Útil si volumen >10,000/sec"]
+   ```
+
+3. **Revisa** que incluyas:
+   - ✅ Métricas concretas (latencia, TTL, reducción, etc.)
+   - ✅ Al menos 1 alternativa descartada explicada
+   - ✅ Contexto de aplicabilidad de la alternativa
+   - ❌ Evita bloques de código >15 líneas
+   - ❌ Evita justificaciones vagas ("es mejor", "más rápido")
+
+**Ejemplo de decisión documentable:**
+```java
+// CÓDIGO: Usar @Cacheable con TTL específico
+@Cacheable(value = "gustos", key = "'all'", ttl = 86400)
+public List<Gusto> getAllGustos() { ... }
+```
+
+```markdown
+// DOCUMENTACIÓN en ARQUITECTURA_FUNCIONAL_DETALLADA.md:
+#### ¿Por qué cachear gustos con TTL 24 horas?
+
+**Decisión:** TTL = 86400 segundos (24 horas)
+
+**Razones:**
+1. **Datos Semi-Estáticos**: Se modifican 1-2 veces/mes
+2. **Reducción 1000x**: 1000 queries/día → 1 query/día
+3. **Dataset Pequeño**: ~2KB total
+
+**Alternativa Descartada:** TTL corto (5 min)
+- ❌ Reduce cache hit ratio de 99% a 80%
+- ✅ Útil si: Datos cambian frecuentemente
+```
 
 ## Reglas de Negocio Críticas
 
@@ -652,6 +803,18 @@ export class EventCardComponent implements OnInit {
 ## Contacto y Recursos
 
 Para preguntas sobre la arquitectura o implementación, consultar:
-- **PLAN_TECNICO_AMIGUSTO.md** - Plan técnico completo
-- **ARQUITECTURA_PROYECTO.md** - Estructura detallada de código
-- **EJEMPLOS_CODIGO.md** - Ejemplos prácticos de implementación
+
+### Decisiones de Arquitectura (¿POR QUÉ?)
+- **ARQUITECTURA_FUNCIONAL_DETALLADA.md** 🎯 - Justificaciones técnicas detalladas
+  - ¿Por qué PostgreSQL vs MongoDB?
+  - ¿Por qué Feign vs RabbitMQ?
+  - ¿Por qué TTL de 5 min vs 10 min?
+  - Incluye métricas, comparaciones y alternativas descartadas
+
+### Implementación (¿CÓMO?)
+- **ARQUITECTURA_MICROSERVICIOS.md** - Arquitectura completa de microservicios
+- **EJEMPLOS_CODIGO.md** - Ejemplos prácticos de Controllers, Services, Feign, RabbitMQ
+- **ARQUITECTURA_PROYECTO.md** - Estructura detallada de carpetas por microservicio
+
+### Planificación
+- **PLAN_TECNICO_AMIGUSTO.md** - Plan de implementación por fases y tareas
